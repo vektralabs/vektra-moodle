@@ -65,7 +65,7 @@ class block_vektra extends block_base {
      * Provide instance-specific configuration fields.
      */
     public function specialization() {
-        if (!empty($this->config->title)) {
+        if (!empty($this->config?->title)) {
             $this->title = $this->config->title;
         }
     }
@@ -89,8 +89,7 @@ class block_vektra extends block_base {
         $this->content->footer = '';
 
         // Only show for users with the usechatbot capability (enrolled students, teachers).
-        $context = context_course::instance($COURSE->id);
-        if (!has_capability('block/vektra:usechatbot', $context)) {
+        if (!has_capability('block/vektra:usechatbot', $this->context)) {
             return $this->content;
         }
 
@@ -105,15 +104,15 @@ class block_vektra extends block_base {
         }
 
         // Determine course_id: use per-instance override or Moodle shortname.
-        $courseid = !empty($this->config->course_id)
+        $courseid = !empty($this->config?->course_id)
             ? $this->config->course_id
             : $COURSE->shortname;
 
         // Determine widget options from instance config or global defaults.
-        $theme = !empty($this->config->theme)
+        $theme = !empty($this->config?->theme)
             ? $this->config->theme
             : get_config('block_vektra', 'default_theme');
-        $language = !empty($this->config->language)
+        $language = !empty($this->config?->language)
             ? $this->config->language
             : current_language();
 
@@ -163,8 +162,8 @@ class block_vektra extends block_base {
     /**
      * Return a cached token from the user session, or generate a new one.
      *
-     * Tokens are cached per student+course with a safety margin of 5 minutes
-     * before expiry to avoid serving an about-to-expire token.
+     * Tokens are cached per student+course using the server-provided expiry,
+     * with a 5-minute safety margin to avoid serving about-to-expire tokens.
      *
      * @param string $username Moodle username.
      * @param string $courseid Vektra course identifier.
@@ -186,23 +185,23 @@ class block_vektra extends block_base {
         if (
             isset($SESSION->{$cachekey}) &&
             is_array($SESSION->{$cachekey}) &&
-            $SESSION->{$cachekey}['expires'] > time() + 300  // 5 min safety margin
+            $SESSION->{$cachekey}['expires_at'] > time() + 300  // 5 min safety margin
         ) {
             return $SESSION->{$cachekey}['token'];
         }
 
         // Generate a fresh token.
         $client = new \block_vektra\vektra_client($apiurl, $apikey);
-        $token = $client->generate_token($username, $courseid);
+        $result = $client->generate_token($username, $courseid);
 
-        if ($token !== null) {
-            // Cache with the TTL used by the client (default 8h).
+        if ($result !== null) {
             $SESSION->{$cachekey} = [
-                'token'   => $token,
-                'expires' => time() + 28800,
+                'token'      => $result['token'],
+                'expires_at' => $result['expires_at'],
             ];
+            return $result['token'];
         }
 
-        return $token;
+        return null;
     }
 }

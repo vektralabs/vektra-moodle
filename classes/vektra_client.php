@@ -40,38 +40,34 @@ class vektra_client {
     /** @var string Vektra API key (admin scope required for token generation). */
     private string $apikey;
 
-    /** @var int Token validity in seconds (default: 8 hours). */
-    private int $token_ttl;
-
     /**
      * Constructor.
      *
      * @param string $apiurl Vektra API base URL (e.g., https://vektra.example.com).
      * @param string $apikey API key with admin scope.
-     * @param int $token_ttl Token validity in seconds. Default 28800 (8 hours).
      */
-    public function __construct(string $apiurl, string $apikey, int $token_ttl = 28800) {
+    public function __construct(string $apiurl, string $apikey) {
         $this->apiurl = rtrim($apiurl, '/');
         $this->apikey = $apikey;
-        $this->token_ttl = $token_ttl;
     }
 
     /**
      * Generate a JWT dashboard token for a student+course pair.
      *
      * Calls POST /api/v1/learn/tokens on the Vektra API.
+     * Returns both the token string and the server-provided expiry timestamp
+     * so callers can cache accurately.
      *
      * @param string $studentid Student identifier (Moodle username).
      * @param string $courseid Course identifier.
-     * @return string|null The JWT token string, or null on failure.
+     * @return array{token: string, expires_at: int}|null Token data, or null on failure.
      */
-    public function generate_token(string $studentid, string $courseid): ?string {
+    public function generate_token(string $studentid, string $courseid): ?array {
         $url = $this->apiurl . '/api/v1/learn/tokens';
 
         $payload = json_encode([
             'student_id' => $studentid,
             'course_id'  => $courseid,
-            'expires_in' => $this->token_ttl,
         ]);
 
         $curl = new \curl();
@@ -100,6 +96,18 @@ class vektra_client {
             return null;
         }
 
-        return $data['token'];
+        // Parse expires_at from ISO 8601 response, fallback to 1 hour.
+        $expiresat = time() + 3600;
+        if (!empty($data['expires_at'])) {
+            $parsed = strtotime($data['expires_at']);
+            if ($parsed !== false) {
+                $expiresat = $parsed;
+            }
+        }
+
+        return [
+            'token'      => $data['token'],
+            'expires_at' => $expiresat,
+        ];
     }
 }
