@@ -71,6 +71,10 @@ class vektra_client {
         ]);
 
         $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_TIMEOUT'        => 5,
+            'CURLOPT_CONNECTTIMEOUT' => 3,
+        ]);
         $curl->setHeader([
             'Content-Type: application/json',
             'Authorization: Bearer ' . $this->apikey,

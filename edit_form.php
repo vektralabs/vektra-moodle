@@ -36,14 +36,13 @@ class block_vektra_edit_form extends block_edit_form {
      */
     protected function specific_definition($mform) {
 
-        $mform->addElement('header', 'config_header',
+        $mform->addElement('header', 'vektraheader',
             get_string('blocksettings', 'block'));
 
-        // Block title override.
+        // Block title override (empty = use plugin name).
         $mform->addElement('text', 'config_title',
             get_string('config_title', 'block_vektra'));
         $mform->setType('config_title', PARAM_TEXT);
-        $mform->setDefault('config_title', get_string('pluginname', 'block_vektra'));
 
         // Vektra course_id override (defaults to Moodle course shortname).
         $mform->addElement('text', 'config_course_id',
