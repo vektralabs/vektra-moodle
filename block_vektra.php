@@ -25,10 +25,10 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
+/**
+ * Block vektra class — injects the Vektra chatbot widget into course pages.
+ */
 class block_vektra extends block_base {
-
     /** @var int Safety margin in seconds to avoid serving about-to-expire tokens. */
     private const TOKEN_EXPIRY_MARGIN_SECONDS = 300;
 
@@ -81,7 +81,7 @@ class block_vektra extends block_base {
      * chat button in the bottom-right corner.
      */
     public function get_content() {
-        global $USER, $COURSE, $PAGE;
+        global $USER, $COURSE;
 
         if ($this->content !== null) {
             return $this->content;
@@ -119,8 +119,7 @@ class block_vektra extends block_base {
             ? $this->config->language
             : current_language();
 
-        // Get or generate a JWT token, cached in the user session to avoid
-        // an API call on every page load.
+        // Get or generate a JWT token, cached in session to avoid repeated API calls.
         $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey);
 
         if ($token === null) {
@@ -154,7 +153,7 @@ class block_vektra extends block_base {
         }
         $jscode .= "document.body.appendChild(s);";
 
-        $PAGE->requires->js_init_code($jscode, false);
+        $this->page->requires->js_init_code($jscode, false);
 
         // Block content is empty — widget floats independently.
         $this->content->text = get_string('widgetactive', 'block_vektra');

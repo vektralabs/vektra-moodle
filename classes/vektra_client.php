@@ -24,8 +24,6 @@
 
 namespace block_vektra;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * HTTP client for the Vektra Learn API.
  *
@@ -33,7 +31,6 @@ defined('MOODLE_INTERNAL') || die();
  * Uses Moodle's curl wrapper for HTTP requests.
  */
 class vektra_client {
-
     /** @var int Fallback token expiry in seconds when the server does not provide one. */
     private const DEFAULT_TOKEN_FALLBACK_EXPIRY_SECONDS = 900;
 

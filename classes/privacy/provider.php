@@ -28,13 +28,10 @@
 
 namespace block_vektra\privacy;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Privacy provider — declares that this plugin does not store user data.
  */
 class provider implements \core_privacy\local\metadata\null_provider {
-
     /**
      * Returns the reason this plugin collects no data.
      *
