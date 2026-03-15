@@ -33,12 +33,13 @@ jobs:
 
       - name: Run phpcs with Moodle standard
         run: |
+          set -o pipefail
           ./moodle-cs/vendor/bin/phpcs \
             --standard=moodle \
             --extensions=php \
-            --ignore=vendor \
+            --ignore=vendor,moodle-cs \
             --report=checkstyle \
-            . | cs2pr || true
+            . | cs2pr
 
   release-zip:
     name: Validate release zip structure
