@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    name: PHP Syntax & Moodle Code Style
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: cs2pr
+
+      - name: PHP syntax check
+        run: find . -name '*.php' -not -path './vendor/*' | xargs -n1 php -l
+
+      - name: Install Moodle Code Checker
+        run: |
+          composer create-project moodlehq/moodle-cs moodle-cs --no-interaction
+          cd moodle-cs && composer install --no-interaction
+
+      - name: Run phpcs with Moodle standard
+        run: |
+          ./moodle-cs/vendor/bin/phpcs \
+            --standard=moodle \
+            --extensions=php \
+            --ignore=vendor \
+            --report=checkstyle \
+            . | cs2pr || true
+
+  release-zip:
+    name: Validate release zip structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zip
+        run: |
+          mkdir -p /tmp/vektra
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.gitignore' . /tmp/vektra/
+          cd /tmp && zip -r vektra.zip vektra/
+
+      - name: Validate structure
+        run: |
+          zipinfo /tmp/vektra.zip | head -20
+          # Must contain version.php at plugin root
+          unzip -l /tmp/vektra.zip | grep -q 'vektra/version.php'
+          echo "Release zip structure OK"
