@@ -25,9 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 if ($ADMIN->fulltree) {
-
-    // --- Connection settings ---
-
+    // Connection settings.
     $settings->add(new admin_setting_heading(
         'block_vektra/connection',
         get_string('settings_connection', 'block_vektra'),
@@ -49,8 +47,7 @@ if ($ADMIN->fulltree) {
         ''
     ));
 
-    // --- Widget defaults ---
-
+    // Widget defaults.
     $settings->add(new admin_setting_heading(
         'block_vektra/widget',
         get_string('settings_widget', 'block_vektra'),
