@@ -29,6 +29,9 @@ defined('MOODLE_INTERNAL') || die();
 
 class block_vektra extends block_base {
 
+    /** @var int Safety margin in seconds to avoid serving about-to-expire tokens. */
+    private const TOKEN_EXPIRY_MARGIN_SECONDS = 300;
+
     /**
      * Initialize the block.
      */
@@ -179,13 +182,16 @@ class block_vektra extends block_base {
     ): ?string {
         global $SESSION;
 
-        $cachekey = 'block_vektra_' . sha1($username . '|' . $courseid);
+        $cachekey = 'block_vektra_' . sha1(
+            $apiurl . '|' . hash('sha256', $apikey) . '|' . $username . '|' . $courseid
+        );
 
         // Check session cache: token + expiry timestamp.
         if (
             isset($SESSION->{$cachekey}) &&
             is_array($SESSION->{$cachekey}) &&
-            $SESSION->{$cachekey}['expires_at'] > time() + 300  // 5 min safety margin
+            isset($SESSION->{$cachekey}['expires_at'], $SESSION->{$cachekey}['token']) &&
+            $SESSION->{$cachekey}['expires_at'] > time() + self::TOKEN_EXPIRY_MARGIN_SECONDS
         ) {
             return $SESSION->{$cachekey}['token'];
         }
