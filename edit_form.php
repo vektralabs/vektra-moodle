@@ -36,22 +36,33 @@ class block_vektra_edit_form extends block_edit_form {
      */
     protected function specific_definition($mform) {
 
-        $mform->addElement('header', 'vektraheader',
-            get_string('blocksettings', 'block'));
+        $mform->addElement(
+            'header',
+            'vektraheader',
+            get_string('blocksettings', 'block')
+        );
 
         // Block title override (empty = use plugin name).
-        $mform->addElement('text', 'config_title',
-            get_string('config_title', 'block_vektra'));
+        $mform->addElement(
+            'text',
+            'config_title',
+            get_string('config_title', 'block_vektra')
+        );
         $mform->setType('config_title', PARAM_TEXT);
 
         // Vektra course_id override (defaults to Moodle course shortname).
-        $mform->addElement('text', 'config_course_id',
-            get_string('config_course_id', 'block_vektra'));
+        $mform->addElement(
+            'text',
+            'config_course_id',
+            get_string('config_course_id', 'block_vektra')
+        );
         $mform->setType('config_course_id', PARAM_ALPHANUMEXT);
         $mform->addHelpButton('config_course_id', 'config_course_id', 'block_vektra');
 
         // Theme override.
-        $mform->addElement('select', 'config_theme',
+        $mform->addElement(
+            'select',
+            'config_theme',
             get_string('config_theme', 'block_vektra'),
             [
                 ''      => get_string('usedefault', 'block_vektra'),
@@ -61,8 +72,11 @@ class block_vektra_edit_form extends block_edit_form {
         );
 
         // Language override.
-        $mform->addElement('text', 'config_language',
-            get_string('config_language', 'block_vektra'));
+        $mform->addElement(
+            'text',
+            'config_language',
+            get_string('config_language', 'block_vektra')
+        );
         $mform->setType('config_language', PARAM_ALPHA);
         $mform->addHelpButton('config_language', 'config_language', 'block_vektra');
     }
