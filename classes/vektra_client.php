@@ -34,6 +34,9 @@ defined('MOODLE_INTERNAL') || die();
  */
 class vektra_client {
 
+    /** @var int Fallback token expiry in seconds when the server does not provide one. */
+    private const DEFAULT_TOKEN_FALLBACK_EXPIRY_SECONDS = 900;
+
     /** @var string Vektra API base URL. */
     private string $apiurl;
 
@@ -100,8 +103,8 @@ class vektra_client {
             return null;
         }
 
-        // Parse expires_at from ISO 8601 response, fallback to 1 hour.
-        $expiresat = time() + 3600;
+        // Parse expires_at from ISO 8601 response, fallback to short TTL.
+        $expiresat = time() + self::DEFAULT_TOKEN_FALLBACK_EXPIRY_SECONDS;
         if (!empty($data['expires_at'])) {
             $parsed = strtotime($data['expires_at']);
             if ($parsed !== false) {
