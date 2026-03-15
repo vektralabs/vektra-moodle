@@ -32,7 +32,7 @@ The Vektra course ID defaults to the Moodle course short name. It must match the
 
 ## How it works
 
-1. When a student opens a course page, the block generates a short-lived JWT token via the Vektra API
+1. When a user opens a course page, the block generates a short-lived JWT token via the Vektra API
 2. The token is cached in the PHP session to avoid repeated API calls
 3. The block injects the Vektra chatbot widget (`vektra-chat.js`) into the page footer
 4. The widget appears as a floating chat button in the bottom-right corner
