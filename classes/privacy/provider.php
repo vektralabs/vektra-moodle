@@ -15,18 +15,32 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for block_vektra.
+ * Privacy subsystem implementation for block_vektra.
+ *
+ * This plugin does not store any personal data in Moodle. Tokens are
+ * generated server-side via the Vektra API and cached only in the
+ * PHP session (not persisted to database).
  *
  * @package    block_vektra
  * @copyright  2026 VektraLabs
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace block_vektra\privacy;
+
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'block_vektra';
-$plugin->version   = 2026031501;
-$plugin->requires  = 2025100600; // Moodle 5.1
-$plugin->supported = [501, 501];
-$plugin->maturity  = MATURITY_ALPHA;
-$plugin->release   = '0.1.0';
+/**
+ * Privacy provider — declares that this plugin does not store user data.
+ */
+class provider implements \core_privacy\local\metadata\null_provider {
+
+    /**
+     * Returns the reason this plugin collects no data.
+     *
+     * @return string The language string identifier for the reason.
+     */
+    public static function get_reason(): string {
+        return 'privacy:metadata';
+    }
+}

@@ -62,13 +62,6 @@ class block_vektra extends block_base {
     }
 
     /**
-     * Enable per-instance configuration (course_id mapping, theme, language).
-     */
-    public function instance_allow_config() {
-        return true;
-    }
-
-    /**
      * Provide instance-specific configuration fields.
      */
     public function specialization() {
@@ -95,9 +88,9 @@ class block_vektra extends block_base {
         $this->content->text = '';
         $this->content->footer = '';
 
-        // Only show for enrolled students, not guests.
+        // Only show for users with the usechatbot capability (enrolled students, teachers).
         $context = context_course::instance($COURSE->id);
-        if (!is_enrolled($context, $USER, '', true)) {
+        if (!has_capability('block/vektra:usechatbot', $context)) {
             return $this->content;
         }
 
@@ -124,9 +117,9 @@ class block_vektra extends block_base {
             ? $this->config->language
             : current_language();
 
-        // Generate a JWT token for this student+course via Vektra API.
-        $client = new \block_vektra\vektra_client($apiurl, $apikey);
-        $token = $client->generate_token($USER->username, $courseid);
+        // Get or generate a JWT token, cached in the user session to avoid
+        // an API call on every page load.
+        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey);
 
         if ($token === null) {
             if (has_capability('moodle/site:config', context_system::instance())) {
@@ -151,11 +144,11 @@ class block_vektra extends block_base {
             $attributes['data-language'] = $language;
         }
 
-        // Inject widget via js_init_code (compatible with Moodle 4.1+).
+        // Inject widget via js_init_code. Use json_encode for safe JS escaping.
         $jscode = "var s=document.createElement('script');";
         foreach ($attributes as $key => $value) {
-            $jscode .= "s.setAttribute('" . addslashes_js($key) . "','"
-                     . addslashes_js($value) . "');";
+            $jscode .= "s.setAttribute(" . json_encode($key) . ","
+                     . json_encode($value) . ");";
         }
         $jscode .= "document.body.appendChild(s);";
 
@@ -165,5 +158,51 @@ class block_vektra extends block_base {
         $this->content->text = get_string('widgetactive', 'block_vektra');
 
         return $this->content;
+    }
+
+    /**
+     * Return a cached token from the user session, or generate a new one.
+     *
+     * Tokens are cached per student+course with a safety margin of 5 minutes
+     * before expiry to avoid serving an about-to-expire token.
+     *
+     * @param string $username Moodle username.
+     * @param string $courseid Vektra course identifier.
+     * @param string $apiurl Vektra API base URL.
+     * @param string $apikey Vektra API key.
+     * @return string|null JWT token or null on failure.
+     */
+    private function get_cached_token(
+        string $username,
+        string $courseid,
+        string $apiurl,
+        string $apikey,
+    ): ?string {
+        global $SESSION;
+
+        $cachekey = 'block_vektra_' . sha1($username . '|' . $courseid);
+
+        // Check session cache: token + expiry timestamp.
+        if (
+            isset($SESSION->{$cachekey}) &&
+            is_array($SESSION->{$cachekey}) &&
+            $SESSION->{$cachekey}['expires'] > time() + 300  // 5 min safety margin
+        ) {
+            return $SESSION->{$cachekey}['token'];
+        }
+
+        // Generate a fresh token.
+        $client = new \block_vektra\vektra_client($apiurl, $apikey);
+        $token = $client->generate_token($username, $courseid);
+
+        if ($token !== null) {
+            // Cache with the TTL used by the client (default 8h).
+            $SESSION->{$cachekey} = [
+                'token'   => $token,
+                'expires' => time() + 28800,
+            ];
+        }
+
+        return $token;
     }
 }
