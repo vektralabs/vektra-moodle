@@ -25,9 +25,12 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
+/**
+ * Block vektra class — injects the Vektra chatbot widget into course pages.
+ */
 class block_vektra extends block_base {
+    /** @var int Safety margin in seconds to avoid serving about-to-expire tokens. */
+    private const TOKEN_EXPIRY_MARGIN_SECONDS = 300;
 
     /**
      * Initialize the block.
@@ -62,17 +65,10 @@ class block_vektra extends block_base {
     }
 
     /**
-     * Enable per-instance configuration (course_id mapping, theme, language).
-     */
-    public function instance_allow_config() {
-        return true;
-    }
-
-    /**
      * Provide instance-specific configuration fields.
      */
     public function specialization() {
-        if (!empty($this->config->title)) {
+        if (!empty($this->config?->title)) {
             $this->title = $this->config->title;
         }
     }
@@ -85,7 +81,7 @@ class block_vektra extends block_base {
      * chat button in the bottom-right corner.
      */
     public function get_content() {
-        global $USER, $COURSE, $PAGE;
+        global $USER, $COURSE;
 
         if ($this->content !== null) {
             return $this->content;
@@ -95,9 +91,8 @@ class block_vektra extends block_base {
         $this->content->text = '';
         $this->content->footer = '';
 
-        // Only show for enrolled students, not guests.
-        $context = context_course::instance($COURSE->id);
-        if (!is_enrolled($context, $USER, '', true)) {
+        // Only show for users with the usechatbot capability (enrolled students, teachers).
+        if (!has_capability('block/vektra:usechatbot', $this->context)) {
             return $this->content;
         }
 
@@ -112,21 +107,20 @@ class block_vektra extends block_base {
         }
 
         // Determine course_id: use per-instance override or Moodle shortname.
-        $courseid = !empty($this->config->course_id)
+        $courseid = !empty($this->config?->course_id)
             ? $this->config->course_id
             : $COURSE->shortname;
 
         // Determine widget options from instance config or global defaults.
-        $theme = !empty($this->config->theme)
+        $theme = !empty($this->config?->theme)
             ? $this->config->theme
             : get_config('block_vektra', 'default_theme');
-        $language = !empty($this->config->language)
+        $language = !empty($this->config?->language)
             ? $this->config->language
             : current_language();
 
-        // Generate a JWT token for this student+course via Vektra API.
-        $client = new \block_vektra\vektra_client($apiurl, $apikey);
-        $token = $client->generate_token($USER->username, $courseid);
+        // Get or generate a JWT token, cached in session to avoid repeated API calls.
+        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey);
 
         if ($token === null) {
             if (has_capability('moodle/site:config', context_system::instance())) {
@@ -151,19 +145,68 @@ class block_vektra extends block_base {
             $attributes['data-language'] = $language;
         }
 
-        // Inject widget via js_init_code (compatible with Moodle 4.1+).
+        // Inject widget via js_init_code. Use json_encode for safe JS escaping.
         $jscode = "var s=document.createElement('script');";
         foreach ($attributes as $key => $value) {
-            $jscode .= "s.setAttribute('" . addslashes_js($key) . "','"
-                     . addslashes_js($value) . "');";
+            $jscode .= "s.setAttribute(" . json_encode($key) . ","
+                     . json_encode($value) . ");";
         }
         $jscode .= "document.body.appendChild(s);";
 
-        $PAGE->requires->js_init_code($jscode, false);
+        $this->page->requires->js_init_code($jscode, false);
 
         // Block content is empty — widget floats independently.
         $this->content->text = get_string('widgetactive', 'block_vektra');
 
         return $this->content;
+    }
+
+    /**
+     * Return a cached token from the user session, or generate a new one.
+     *
+     * Tokens are cached per student+course using the server-provided expiry,
+     * with a 5-minute safety margin to avoid serving about-to-expire tokens.
+     *
+     * @param string $username Moodle username.
+     * @param string $courseid Vektra course identifier.
+     * @param string $apiurl Vektra API base URL.
+     * @param string $apikey Vektra API key.
+     * @return string|null JWT token or null on failure.
+     */
+    private function get_cached_token(
+        string $username,
+        string $courseid,
+        string $apiurl,
+        string $apikey,
+    ): ?string {
+        global $SESSION;
+
+        $cachekey = 'block_vektra_' . sha1(
+            $apiurl . '|' . hash('sha256', $apikey) . '|' . $username . '|' . $courseid
+        );
+
+        // Check session cache: token + expiry timestamp.
+        if (
+            isset($SESSION->{$cachekey}) &&
+            is_array($SESSION->{$cachekey}) &&
+            isset($SESSION->{$cachekey}['expires_at'], $SESSION->{$cachekey}['token']) &&
+            $SESSION->{$cachekey}['expires_at'] > time() + self::TOKEN_EXPIRY_MARGIN_SECONDS
+        ) {
+            return $SESSION->{$cachekey}['token'];
+        }
+
+        // Generate a fresh token.
+        $client = new \block_vektra\vektra_client($apiurl, $apikey);
+        $result = $client->generate_token($username, $courseid);
+
+        if ($result !== null) {
+            $SESSION->{$cachekey} = [
+                'token'      => $result['token'],
+                'expires_at' => $result['expires_at'],
+            ];
+            return $result['token'];
+        }
+
+        return null;
     }
 }
