@@ -65,7 +65,7 @@ class block_vektra_edit_form extends block_edit_form {
             get_string('config_namespace', 'block_vektra')
         );
         $mform->setType('config_namespace', PARAM_ALPHANUMEXT);
-        $mform->addRule('config_namespace', get_string('maximumchars', '', 64), 'maxlength', 64, 'client');
+        $mform->addRule('config_namespace', get_string('maximumchars', '', 64), 'maxlength', 64);
         $mform->addHelpButton('config_namespace', 'config_namespace', 'block_vektra');
 
         // Theme override.
