@@ -58,6 +58,15 @@ class block_vektra_edit_form extends block_edit_form {
         $mform->setType('config_course_id', PARAM_ALPHANUMEXT);
         $mform->addHelpButton('config_course_id', 'config_course_id', 'block_vektra');
 
+        // Vektra namespace override (defaults to course_id on the API side).
+        $mform->addElement(
+            'text',
+            'config_namespace',
+            get_string('config_namespace', 'block_vektra')
+        );
+        $mform->setType('config_namespace', PARAM_ALPHANUMEXT);
+        $mform->addHelpButton('config_namespace', 'config_namespace', 'block_vektra');
+
         // Theme override.
         $mform->addElement(
             'select',
