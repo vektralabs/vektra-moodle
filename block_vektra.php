@@ -129,12 +129,19 @@ class block_vektra extends block_base {
             return $this->content;
         }
 
+        // Use public URL for browser-side resources (widget JS + API calls).
+        // Falls back to API URL when not set (same host serves both).
+        $publicurl = get_config('block_vektra', 'publicurl');
+        if (empty($publicurl)) {
+            $publicurl = $apiurl;
+        }
+
         // Inject widget script via Moodle's page API (renders in footer).
-        $widgeturl = rtrim($apiurl, '/') . '/static/vektra-chat.js';
+        $widgeturl = rtrim($publicurl, '/') . '/static/learn/vektra-chat.js';
 
         $attributes = [
             'src'            => $widgeturl,
-            'data-api-url'   => $apiurl,
+            'data-api-url'   => $publicurl,
             'data-course-id' => $courseid,
             'data-token'     => $token,
         ];
