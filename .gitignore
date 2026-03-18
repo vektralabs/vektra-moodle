@@ -1,12 +1,48 @@
-# IDE
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
-# OS
-.DS_Store
-Thumbs.db
+# Logs
+*.log
+logs/
 
-# Moodle
-/vendor/
+# Local development
+.env
+.env.local
+.env.*.local
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Dependencies
+vendor/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+test_curl.php
+
+# S2S local state
+.s2s/*
+# Track shared artifacts
+!.s2s/BACKLOG.md
+!.s2s/CONTEXT.md
+!.s2s/README.md
+!.s2s/config.yaml
+!.s2s/requirements.md
+!.s2s/architecture.md
+!.s2s/ideas.md
+!.s2s/decisions/
+!.s2s/decisions/**
+!.s2s/plans/
+!.s2s/plans/**
+
+# Local archive
+.archive/
