@@ -43,7 +43,7 @@ RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|g' /e
 RUN mkdir -p /var/moodledata && \
     chown -R www-data:www-data /var/moodledata /var/www/html && \
     chmod -R 755 /var/www/html && \
-    chmod -R 777 /var/moodledata
+    chmod -R 770 /var/moodledata
 
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
