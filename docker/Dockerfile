@@ -1,7 +1,7 @@
 FROM php:8.3-apache
 
 # System dependencies for PHP extensions
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
@@ -27,9 +27,13 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 
 RUN a2enmod rewrite
 
-# Download Moodle 5.1 (branch stable501)
+# Download Moodle 5.1 (branch stable501) with checksum verification.
+# Update MOODLE_TGZ_SHA256 when upgrading Moodle version.
+ARG MOODLE_TGZ_URL=https://download.moodle.org/download.php/direct/stable501/moodle-latest-501.tgz
+ARG MOODLE_TGZ_SHA256=bdc98f85c9e0cbf2d55d61e9c581516b79d962b9315623099733695d53a1d25a
 RUN cd /tmp && \
-    curl -L -o moodle.tgz https://download.moodle.org/download.php/direct/stable501/moodle-latest-501.tgz && \
+    curl -fsSL -o moodle.tgz "${MOODLE_TGZ_URL}" && \
+    echo "${MOODLE_TGZ_SHA256}  moodle.tgz" | sha256sum -c - && \
     tar -xzf moodle.tgz && \
     cp -r moodle/* /var/www/html/ && \
     rm -rf moodle moodle.tgz
