@@ -56,8 +56,8 @@ if [ ! -f /var/www/html/config.php ]; then
 
     php admin/cli/install.php \
         --wwwroot="${MOODLE_URL}" \
-        --dataroot=/var/moodledata \
-        --dbtype=mariadb \
+        --dataroot="/var/moodledata" \
+        --dbtype="mariadb" \
         --dbhost="${DB_HOST}" \
         --dbname="${DB_NAME}" \
         --dbuser="${DB_USER}" \
