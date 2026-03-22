@@ -22,7 +22,7 @@ echo "========================================="
 # Wait for MariaDB
 echo "Waiting for MariaDB..."
 RETRIES=30
-until php -r "new mysqli('$DB_HOST', '$DB_USER', '$DB_PASS', '$DB_NAME');" &> /dev/null || [ $RETRIES -eq 0 ]; do
+until php -r "new mysqli(getenv('DB_HOST'), getenv('DB_USER'), getenv('DB_PASS'), getenv('DB_NAME'));" &> /dev/null || [ $RETRIES -eq 0 ]; do
     echo "Waiting for MariaDB, $((RETRIES--)) remaining attempts..."
     sleep 2
 done
@@ -43,7 +43,7 @@ if [ ! -f /var/www/html/config.php ]; then
 
     # Check if database tables already exist (previous install without config.php)
     DB_EXISTS=$(php -r "
-        \$m = new mysqli('$DB_HOST', '$DB_USER', '$DB_PASS', '$DB_NAME');
+        \$m = new mysqli(getenv('DB_HOST'), getenv('DB_USER'), getenv('DB_PASS'), getenv('DB_NAME'));
         \$r = \$m->query('SHOW TABLES');
         echo \$r->num_rows;
     " 2>/dev/null || echo "0")
@@ -55,18 +55,18 @@ if [ ! -f /var/www/html/config.php ]; then
     fi
 
     php admin/cli/install.php \
-        --wwwroot=$MOODLE_URL \
+        "--wwwroot=${MOODLE_URL}" \
         --dataroot=/var/moodledata \
         --dbtype=mariadb \
-        --dbhost=$DB_HOST \
-        --dbname=$DB_NAME \
-        --dbuser=$DB_USER \
-        --dbpass=$DB_PASS \
+        "--dbhost=${DB_HOST}" \
+        "--dbname=${DB_NAME}" \
+        "--dbuser=${DB_USER}" \
+        "--dbpass=${DB_PASS}" \
         --fullname="Moodle Site" \
         --shortname="Moodle" \
-        --adminuser=$ADMIN_USER \
-        --adminpass=$ADMIN_PASS \
-        --adminemail=$ADMIN_EMAIL \
+        "--adminuser=${ADMIN_USER}" \
+        "--adminpass=${ADMIN_PASS}" \
+        "--adminemail=${ADMIN_EMAIL}" \
         --non-interactive \
         --agree-license \
         $SKIP_DB
