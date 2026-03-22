@@ -36,7 +36,8 @@ RUN cd /tmp && \
 
 # Moodle 5.1 serves from public/ subdirectory
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/public|g' /etc/apache2/sites-available/000-default.conf && \
-    sed -i 's|<Directory /var/www/>|<Directory /var/www/html/public>\n    AllowOverride All|g' /etc/apache2/apache2.conf
+    printf '<Directory /var/www/html/public>\n    Options Indexes FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>\n' > /etc/apache2/conf-available/moodle-public.conf && \
+    a2enconf moodle-public
 
 # Moodle data directory (outside web root)
 RUN mkdir -p /var/moodledata && \
