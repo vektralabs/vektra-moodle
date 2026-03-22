@@ -60,15 +60,20 @@ class vektra_client {
      *
      * @param string $studentid Student identifier (Moodle username).
      * @param string $courseid Course identifier.
+     * @param string|null $namespace Optional namespace override (max 64 chars). When omitted, the API uses course_id.
      * @return array{token: string, expires_at: int}|null Token data, or null on failure.
      */
-    public function generate_token(string $studentid, string $courseid): ?array {
+    public function generate_token(string $studentid, string $courseid, ?string $namespace = null): ?array {
         $url = $this->apiurl . '/api/v1/learn/tokens';
 
-        $payload = json_encode([
+        $body = [
             'student_id' => $studentid,
             'course_id'  => $courseid,
-        ]);
+        ];
+        if ($namespace !== null && $namespace !== '') {
+            $body['namespace'] = $namespace;
+        }
+        $payload = json_encode($body);
 
         $curl = new \curl();
         $curl->setopt([

@@ -111,6 +111,11 @@ class block_vektra extends block_base {
             ? $this->config->course_id
             : $COURSE->shortname;
 
+        // Determine namespace: explicit config, or null to let the API default to course_id.
+        $namespace = (isset($this->config->namespace) && $this->config->namespace !== '')
+            ? $this->config->namespace
+            : null;
+
         // Determine widget options from instance config or global defaults.
         $theme = !empty($this->config?->theme)
             ? $this->config->theme
@@ -120,7 +125,7 @@ class block_vektra extends block_base {
             : current_language();
 
         // Get or generate a JWT token, cached in session to avoid repeated API calls.
-        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey);
+        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey, $namespace);
 
         if ($token === null) {
             if (has_capability('moodle/site:config', context_system::instance())) {
@@ -178,6 +183,7 @@ class block_vektra extends block_base {
      * @param string $courseid Vektra course identifier.
      * @param string $apiurl Vektra API base URL.
      * @param string $apikey Vektra API key.
+     * @param string|null $namespace Optional namespace override for the JWT.
      * @return string|null JWT token or null on failure.
      */
     private function get_cached_token(
@@ -185,11 +191,13 @@ class block_vektra extends block_base {
         string $courseid,
         string $apiurl,
         string $apikey,
+        ?string $namespace = null,
     ): ?string {
         global $SESSION;
 
         $cachekey = 'block_vektra_' . sha1(
             $apiurl . '|' . hash('sha256', $apikey) . '|' . $username . '|' . $courseid
+            . '|' . ($namespace ?? '')
         );
 
         // Check session cache: token + expiry timestamp.
@@ -204,7 +212,7 @@ class block_vektra extends block_base {
 
         // Generate a fresh token.
         $client = new \block_vektra\vektra_client($apiurl, $apikey);
-        $result = $client->generate_token($username, $courseid);
+        $result = $client->generate_token($username, $courseid, $namespace);
 
         if ($result !== null) {
             $SESSION->{$cachekey} = [
