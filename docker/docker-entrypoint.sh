@@ -1,15 +1,16 @@
 #!/bin/bash
 set -e
 
-# Defaults from environment variables
-MOODLE_URL=${MOODLE_URL:-http://localhost}
-DB_HOST=${DB_HOST:-mariadb}
-DB_NAME=${DB_NAME:-moodle}
-DB_USER=${DB_USER:-moodleuser}
-DB_PASS=${DB_PASS:-moodlepass}
-ADMIN_USER=${ADMIN_USER:-admin}
-ADMIN_PASS=${ADMIN_PASS:-Admin123!}
-ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+# Defaults from environment variables.
+# Export so PHP subprocesses can read them via getenv().
+export MOODLE_URL=${MOODLE_URL:-http://localhost}
+export DB_HOST=${DB_HOST:-mariadb}
+export DB_NAME=${DB_NAME:-moodle}
+export DB_USER=${DB_USER:-moodleuser}
+export DB_PASS=${DB_PASS:-moodlepass}
+export ADMIN_USER=${ADMIN_USER:-admin}
+export ADMIN_PASS=${ADMIN_PASS:-Admin123!}
+export ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
 
 echo "========================================="
 echo "Moodle Docker container starting"
