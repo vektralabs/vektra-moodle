@@ -35,9 +35,9 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 
 **Acceptance criteria**:
 - [ ] Block shows role-appropriate error message when token generation fails
-- [ ] Admin sees error code/message from Vektra API
+- [ ] Admin sees sanitized error code/message from Vektra API (no secrets/tokens/keys)
 - [ ] Student sees localized "unavailable" message
-- [ ] Error is logged via `debugging()` for Moodle logs
+- [ ] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
 - [ ] No change when everything works (current behavior preserved)
 
 ---

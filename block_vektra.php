@@ -112,7 +112,7 @@ class block_vektra extends block_base {
             : $COURSE->shortname;
 
         // Determine namespace: explicit config, or null to let the API default to course_id.
-        $namespace = (isset($this->config->namespace) && $this->config->namespace !== '')
+        $namespace = (!empty($this->config?->namespace))
             ? $this->config->namespace
             : null;
 
