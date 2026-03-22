@@ -112,9 +112,9 @@ class block_vektra extends block_base {
             : $COURSE->shortname;
 
         // Determine namespace: explicit config, or null to let the API default to course_id.
-        $namespace = (!empty($this->config?->namespace))
-            ? $this->config->namespace
-            : null;
+        // Note: !empty() treats '0' as empty, but '0' is valid for PARAM_ALPHANUMEXT.
+        $ns = $this->config?->namespace;
+        $namespace = (is_string($ns) && $ns !== '') ? $ns : null;
 
         // Determine widget options from instance config or global defaults.
         $theme = !empty($this->config?->theme)
