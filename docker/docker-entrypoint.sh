@@ -55,18 +55,18 @@ if [ ! -f /var/www/html/config.php ]; then
     fi
 
     php admin/cli/install.php \
-        "--wwwroot=${MOODLE_URL}" \
-        --dataroot=/var/moodledata \
-        --dbtype=mariadb \
-        "--dbhost=${DB_HOST}" \
-        "--dbname=${DB_NAME}" \
-        "--dbuser=${DB_USER}" \
-        "--dbpass=${DB_PASS}" \
+        --wwwroot="${MOODLE_URL}" \
+        --dataroot="/var/moodledata" \
+        --dbtype="mariadb" \
+        --dbhost="${DB_HOST}" \
+        --dbname="${DB_NAME}" \
+        --dbuser="${DB_USER}" \
+        --dbpass="${DB_PASS}" \
         --fullname="Moodle Site" \
         --shortname="Moodle" \
-        "--adminuser=${ADMIN_USER}" \
-        "--adminpass=${ADMIN_PASS}" \
-        "--adminemail=${ADMIN_EMAIL}" \
+        --adminuser="${ADMIN_USER}" \
+        --adminpass="${ADMIN_PASS}" \
+        --adminemail="${ADMIN_EMAIL}" \
         --non-interactive \
         --agree-license \
         $SKIP_DB
