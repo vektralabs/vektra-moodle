@@ -35,7 +35,7 @@ This connection is lost when containers are recreated. Re-run after `docker comp
 
 Add the Moodle origin to `VEKTRA_CORS_ORIGINS` in your vektra-stack `.env`:
 
-```
+```env
 VEKTRA_CORS_ORIGINS=http://localhost,http://localhost:10180
 ```
 
