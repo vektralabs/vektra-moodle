@@ -40,6 +40,14 @@ if ($ADMIN->fulltree) {
         PARAM_URL
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'block_vektra/publicurl',
+        get_string('settings_publicurl', 'block_vektra'),
+        get_string('settings_publicurl_desc', 'block_vektra'),
+        '',
+        PARAM_URL
+    ));
+
     $settings->add(new admin_setting_configpasswordunmask(
         'block_vektra/apikey',
         get_string('settings_apikey', 'block_vektra'),

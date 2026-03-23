@@ -36,6 +36,8 @@ $string['settings_connection'] = 'Connessione';
 $string['settings_connection_desc'] = 'Configura la connessione alla tua istanza Vektra.';
 $string['settings_apiurl'] = 'URL API Vektra';
 $string['settings_apiurl_desc'] = 'URL base della tua istanza Vektra (es. https://vektra.example.com). Non includere lo slash finale.';
+$string['settings_publicurl'] = 'URL pubblica (browser)';
+$string['settings_publicurl_desc'] = 'URL accessibile dal browser dell\'utente per caricare il widget e inviare le query. Lascia vuoto se l\'URL API è già raggiungibile dal browser. Necessario solo quando l\'URL server differisce (es. hostname Docker interno).';
 $string['settings_apikey'] = 'Chiave API';
 $string['settings_apikey_desc'] = 'Chiave API Vektra con scope admin. Necessaria per generare i token degli studenti.';
 $string['settings_widget'] = 'Widget - Impostazioni predefinite';
@@ -49,10 +51,15 @@ $string['theme_dark'] = 'Scuro';
 $string['config_title'] = 'Titolo blocco';
 $string['config_course_id'] = 'ID corso Vektra';
 $string['config_course_id_help'] = 'L\'identificativo del corso in Vektra. Lascia vuoto per usare il nome breve del corso Moodle. Deve corrispondere al course_id usato durante l\'ingestion dei materiali in Vektra.';
+$string['config_namespace'] = 'Namespace Vektra';
+$string['config_namespace_help'] = 'Sovrascrivere il namespace incluso nel token JWT (max 64 caratteri). Lascia vuoto per usare il course ID come namespace predefinito. Utile quando più corsi condividono gli stessi materiali o quando il nome breve Moodle contiene caratteri non validi per un namespace.';
 $string['config_theme'] = 'Tema';
 $string['config_language'] = 'Lingua';
 $string['config_language_help'] = 'Sovrascrivere la lingua del widget (es. "en", "it"). Lascia vuoto per usare la lingua corrente di Moodle.';
 $string['usedefault'] = 'Usa predefinito';
+
+// Errors.
+$string['invalidblockinstance'] = 'Istanza del blocco non valida per questo corso.';
 
 // Privacy.
 $string['privacy:metadata'] = 'Il blocco Assistente AI Vektra non memorizza dati personali. I token sono generati tramite l\'API Vektra esterna e conservati solo nella sessione PHP.';

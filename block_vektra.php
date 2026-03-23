@@ -111,6 +111,11 @@ class block_vektra extends block_base {
             ? $this->config->course_id
             : $COURSE->shortname;
 
+        // Determine namespace: explicit config, or null to let the API default to course_id.
+        // Note: !empty() treats '0' as empty, but '0' is valid for PARAM_ALPHANUMEXT.
+        $ns = $this->config?->namespace;
+        $namespace = (is_string($ns) && $ns !== '') ? $ns : null;
+
         // Determine widget options from instance config or global defaults.
         $theme = !empty($this->config?->theme)
             ? $this->config->theme
@@ -120,7 +125,7 @@ class block_vektra extends block_base {
             : current_language();
 
         // Get or generate a JWT token, cached in session to avoid repeated API calls.
-        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey);
+        $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey, $namespace);
 
         if ($token === null) {
             if (has_capability('moodle/site:config', context_system::instance())) {
@@ -129,14 +134,29 @@ class block_vektra extends block_base {
             return $this->content;
         }
 
+        // Use public URL for browser-side resources (widget JS + API calls).
+        // Falls back to API URL when not set (same host serves both).
+        $publicurl = get_config('block_vektra', 'publicurl');
+        if (empty($publicurl)) {
+            $publicurl = $apiurl;
+        }
+
         // Inject widget script via Moodle's page API (renders in footer).
-        $widgeturl = rtrim($apiurl, '/') . '/static/vektra-chat.js';
+        $widgeturl = rtrim($publicurl, '/') . '/static/learn/vektra-chat.js';
+
+        // Build token refresh URL with sesskey for CSRF protection.
+        $refreshurl = new \moodle_url('/blocks/vektra/ajax.php', [
+            'id'       => $this->instance->id,
+            'courseid' => $COURSE->id,
+            'sesskey'  => sesskey(),
+        ]);
 
         $attributes = [
-            'src'            => $widgeturl,
-            'data-api-url'   => $apiurl,
-            'data-course-id' => $courseid,
-            'data-token'     => $token,
+            'src'                    => $widgeturl,
+            'data-api-url'           => $publicurl,
+            'data-course-id'         => $courseid,
+            'data-token'             => $token,
+            'data-token-refresh-url' => $refreshurl->out(false),
         ];
         if (!empty($theme)) {
             $attributes['data-theme'] = $theme;
@@ -171,6 +191,7 @@ class block_vektra extends block_base {
      * @param string $courseid Vektra course identifier.
      * @param string $apiurl Vektra API base URL.
      * @param string $apikey Vektra API key.
+     * @param string|null $namespace Optional namespace override for the JWT.
      * @return string|null JWT token or null on failure.
      */
     private function get_cached_token(
@@ -178,11 +199,13 @@ class block_vektra extends block_base {
         string $courseid,
         string $apiurl,
         string $apikey,
+        ?string $namespace = null,
     ): ?string {
         global $SESSION;
 
         $cachekey = 'block_vektra_' . sha1(
             $apiurl . '|' . hash('sha256', $apikey) . '|' . $username . '|' . $courseid
+            . '|' . ($namespace ?? '')
         );
 
         // Check session cache: token + expiry timestamp.
@@ -197,7 +220,7 @@ class block_vektra extends block_base {
 
         // Generate a fresh token.
         $client = new \block_vektra\vektra_client($apiurl, $apikey);
-        $result = $client->generate_token($username, $courseid);
+        $result = $client->generate_token($username, $courseid, $namespace);
 
         if ($result !== null) {
             $SESSION->{$cachekey} = [

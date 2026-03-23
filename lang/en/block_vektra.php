@@ -36,6 +36,8 @@ $string['settings_connection'] = 'Connection';
 $string['settings_connection_desc'] = 'Configure the connection to your Vektra instance.';
 $string['settings_apiurl'] = 'Vektra API URL';
 $string['settings_apiurl_desc'] = 'Base URL of your Vektra instance (e.g., https://vektra.example.com). Do not include a trailing slash.';
+$string['settings_publicurl'] = 'Public URL (browser)';
+$string['settings_publicurl_desc'] = 'URL accessible from the user\'s browser for loading the widget and making queries. Leave empty if the API URL is already browser-accessible. Only needed when the server-side API URL differs (e.g., Docker internal hostname).';
 $string['settings_apikey'] = 'API Key';
 $string['settings_apikey_desc'] = 'Vektra API key with admin scope. Required for generating student tokens.';
 $string['settings_widget'] = 'Widget defaults';
@@ -49,10 +51,15 @@ $string['theme_dark'] = 'Dark';
 $string['config_title'] = 'Block title';
 $string['config_course_id'] = 'Vektra course ID';
 $string['config_course_id_help'] = 'The course identifier in Vektra. Leave empty to use the Moodle course short name. Must match the course_id used when ingesting materials into Vektra.';
+$string['config_namespace'] = 'Vektra namespace';
+$string['config_namespace_help'] = 'Override the namespace included in the JWT token (max 64 characters). Leave empty to let the API default to the course ID. Useful when multiple courses share the same materials or when the Moodle short name contains characters not valid as a namespace.';
 $string['config_theme'] = 'Theme';
 $string['config_language'] = 'Language';
 $string['config_language_help'] = 'Override the widget language (e.g., "en", "it"). Leave empty to use the current Moodle language.';
 $string['usedefault'] = 'Use default';
+
+// Errors.
+$string['invalidblockinstance'] = 'Invalid block instance for this course.';
 
 // Privacy.
 $string['privacy:metadata'] = 'The Vektra AI Assistant block does not store any personal data. Tokens are generated via the external Vektra API and cached only in the PHP session.';
