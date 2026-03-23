@@ -40,6 +40,25 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 - [ ] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
 - [ ] No change when everything works (current behavior preserved)
 
+### FEAT-002: AJAX endpoint for automatic widget token refresh
+
+**Status**: in_progress | **Priority**: high | **Created**: 2026-03-23
+**Origin**: vektra-stack FEAT-009 (widget data-token-refresh-url support)
+
+**Context**: The vektra-chat.js widget (vektra-stack) supports token auto-refresh via `data-token-refresh-url` (FEAT-009). When the JWT expires (default 1h), the widget POSTs to that URL and expects a `{"token": "..."}` response. The Moodle plugin does not expose this endpoint and does not pass the attribute in the script tag, so refresh fails silently and the user sees "Invalid or expired dashboard token" after 1h of session.
+
+**Proposed approach**:
+1. Create `ajax.php` that accepts authenticated requests via Moodle session, verifies the user is logged in and enrolled in the course, and generates a new JWT calling Vektra `/api/v1/learn/tokens` with the API key from plugin config
+2. In `block_vektra.php`, add `data-token-refresh-url` to the script tag attributes, pointing to the AJAX endpoint
+3. The endpoint must verify sesskey for CSRF protection
+
+**Acceptance criteria**:
+- [ ] AJAX endpoint generates new JWT for authenticated user/course
+- [ ] Endpoint verifies Moodle session and sesskey (CSRF)
+- [ ] `data-token-refresh-url` added to widget script tag
+- [ ] Token refresh transparent to user (no reload)
+- [ ] Refresh error handled by widget (localized message)
+
 ---
 
 <!-- Add items here using the format below -->
