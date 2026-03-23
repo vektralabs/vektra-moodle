@@ -35,7 +35,7 @@ RUN cd /tmp && \
     curl -fsSL -o moodle.tgz "${MOODLE_TGZ_URL}" && \
     echo "${MOODLE_TGZ_SHA256}  moodle.tgz" | sha256sum -c - && \
     tar -xzf moodle.tgz && \
-    cp -r moodle/* /var/www/html/ && \
+    cp -a moodle/. /var/www/html/ && \
     rm -rf moodle moodle.tgz
 
 # Moodle 5.1 serves from public/ subdirectory
