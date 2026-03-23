@@ -146,6 +146,7 @@ class block_vektra extends block_base {
 
         // Build token refresh URL with sesskey for CSRF protection.
         $refreshurl = new \moodle_url('/blocks/vektra/ajax.php', [
+            'id'       => $this->instance->id,
             'courseid' => $COURSE->id,
             'sesskey'  => sesskey(),
         ]);

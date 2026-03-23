@@ -58,5 +58,8 @@ $string['config_language'] = 'Language';
 $string['config_language_help'] = 'Override the widget language (e.g., "en", "it"). Leave empty to use the current Moodle language.';
 $string['usedefault'] = 'Use default';
 
+// Errors.
+$string['invalidblockinstance'] = 'Invalid block instance for this course.';
+
 // Privacy.
 $string['privacy:metadata'] = 'The Vektra AI Assistant block does not store any personal data. Tokens are generated via the external Vektra API and cached only in the PHP session.';

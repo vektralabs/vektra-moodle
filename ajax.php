@@ -30,6 +30,7 @@ define('AJAX_SCRIPT', true);
 require_once(__DIR__ . '/../../config.php');
 
 $courseid = required_param('courseid', PARAM_INT);
+$instanceid = required_param('id', PARAM_INT);
 
 require_login($courseid, false);
 require_sesskey();
@@ -46,18 +47,18 @@ if (empty($apiurl) || empty($apikey)) {
     die();
 }
 
-// Find the block instance for this course to read namespace config.
-$course = get_course($courseid);
+// Load the specific block instance to read namespace/course_id config.
+$instance = $DB->get_record('block_instances', ['id' => $instanceid, 'blockname' => 'vektra'], '*', MUST_EXIST);
+
+if ($instance->parentcontextid != $context->id) {
+    throw new \moodle_exception('invalidblockinstance', 'block_vektra');
+}
+
+$course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 $namespace = null;
 $vektracourse = $course->shortname;
 
-$instances = $DB->get_records('block_instances', [
-    'blockname' => 'vektra',
-    'parentcontextid' => $context->id,
-]);
-
-if ($instances) {
-    $instance = reset($instances);
+if (!empty($instance->configdata)) {
     $config = unserialize_object(base64_decode($instance->configdata));
     if (!empty($config->course_id)) {
         $vektracourse = $config->course_id;
