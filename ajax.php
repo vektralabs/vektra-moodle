@@ -60,15 +60,14 @@ $vektracourse = $course->shortname;
 
 if (!empty($instance->configdata)) {
     $config = unserialize_object(base64_decode($instance->configdata));
-    if (!is_object($config)) {
-        $config = new stdClass();
-    }
-    if (!empty($config->course_id)) {
-        $vektracourse = $config->course_id;
-    }
-    $ns = $config->namespace ?? null;
-    if (is_string($ns) && $ns !== '') {
-        $namespace = $ns;
+    if (is_object($config)) {
+        if (!empty($config->course_id)) {
+            $vektracourse = $config->course_id;
+        }
+        $ns = $config->namespace ?? null;
+        if (is_string($ns) && $ns !== '') {
+            $namespace = $ns;
+        }
     }
 }
 
