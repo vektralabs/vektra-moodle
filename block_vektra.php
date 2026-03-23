@@ -144,11 +144,18 @@ class block_vektra extends block_base {
         // Inject widget script via Moodle's page API (renders in footer).
         $widgeturl = rtrim($publicurl, '/') . '/static/learn/vektra-chat.js';
 
+        // Build token refresh URL with sesskey for CSRF protection.
+        $refreshurl = new \moodle_url('/blocks/vektra/ajax.php', [
+            'courseid' => $COURSE->id,
+            'sesskey'  => sesskey(),
+        ]);
+
         $attributes = [
-            'src'            => $widgeturl,
-            'data-api-url'   => $publicurl,
-            'data-course-id' => $courseid,
-            'data-token'     => $token,
+            'src'                    => $widgeturl,
+            'data-api-url'           => $publicurl,
+            'data-course-id'         => $courseid,
+            'data-token'             => $token,
+            'data-token-refresh-url' => $refreshurl->out(false),
         ];
         if (!empty($theme)) {
             $attributes['data-theme'] = $theme;
