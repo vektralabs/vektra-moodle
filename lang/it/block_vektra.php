@@ -58,5 +58,8 @@ $string['config_language'] = 'Lingua';
 $string['config_language_help'] = 'Sovrascrivere la lingua del widget (es. "en", "it"). Lascia vuoto per usare la lingua corrente di Moodle.';
 $string['usedefault'] = 'Usa predefinito';
 
+// Errors.
+$string['invalidblockinstance'] = 'Istanza del blocco non valida per questo corso.';
+
 // Privacy.
 $string['privacy:metadata'] = 'Il blocco Assistente AI Vektra non memorizza dati personali. I token sono generati tramite l\'API Vektra esterna e conservati solo nella sessione PHP.';
