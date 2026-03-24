@@ -41,11 +41,14 @@ The workflow runs on a configurable schedule (default: every 5 minutes) and:
    - Name: `n8n Ingestion`
    - Enabled: Yes
    - Authorized users only: Yes
-5. Click the **Functions** link on the new service and add:
+5. Click **Edit** on the new service and enable:
+   - **Can download files**: Yes
+   - **Can upload files**: Yes
+6. Click the **Functions** link on the new service and add:
    - `core_course_get_courses`
    - `core_course_get_contents`
    - `core_webservice_get_site_info`
-6. Click **Authorized users** and add the admin user (or a dedicated service user)
+7. Click **Authorized users** and add the admin user (or a dedicated service user)
 
 ### Step 2: Create Moodle WS Token
 
@@ -192,8 +195,13 @@ The workflow only processes files with these MIME types:
 ### n8n cannot reach Moodle or Vektra
 
 - Verify Docker network connections: `docker network inspect vektra-stack_default`
-- Try `docker exec n8n-n8n-1 wget -qO- http://vektra-moodle` to test connectivity
 - Check container names match your setup (`docker ps`)
+- Test connectivity: `docker exec n8n-n8n-1 sh -c "echo quit | nc vektra-moodle 80"`
+
+### "Access control exception" on file download
+
+- Ensure the external service has **Can download files** enabled (Edit service > tick the checkbox)
+- Ensure `$CFG->wwwroot` in Moodle's `config.php` matches the hostname used by n8n (e.g., `http://vektra-moodle`). If it's set to `http://localhost:PORT`, Moodle will redirect requests from n8n and file downloads will fail
 
 ### 409 Conflict on ingest
 

@@ -9,6 +9,13 @@ services:
       - NODE_FUNCTION_ALLOW_BUILTIN=crypto
       - N8N_RUNNERS_ENABLED=false
       - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Rome}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - MOODLE_URL=${MOODLE_URL:-http://vektra-moodle}
+      - MOODLE_WS_TOKEN=${MOODLE_WS_TOKEN}
+      - VEKTRA_API_URL=${VEKTRA_API_URL:-http://vektra-stack-vektra-1:8000}
+      - VEKTRA_API_KEY=${VEKTRA_API_KEY}
+      - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
+      - MOODLE_COURSE_IDS=${MOODLE_COURSE_IDS}
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
