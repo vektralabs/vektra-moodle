@@ -16,10 +16,7 @@
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        0,
-        0
-      ]
+      "position": [0, 0]
     },
     {
       "parameters": {
@@ -28,18 +25,9 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "wstoken",
-              "value": "={{ $env.MOODLE_WS_TOKEN }}"
-            },
-            {
-              "name": "wsfunction",
-              "value": "core_course_get_courses"
-            },
-            {
-              "name": "moodlewsrestformat",
-              "value": "json"
-            }
+            { "name": "wstoken", "value": "={{ $env.MOODLE_WS_TOKEN }}" },
+            { "name": "wsfunction", "value": "core_course_get_courses" },
+            { "name": "moodlewsrestformat", "value": "json" }
           ]
         },
         "options": {}
@@ -48,39 +36,25 @@
       "name": "Get Courses",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        240,
-        0
-      ],
-      "notes": "Fetches all courses from Moodle via Web Services API."
+      "position": [240, 0]
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\n\nconst courses = items.filter(item => {\n  // Skip site-level course (id=1)\n  if (item.json.id === 1) return false;\n  return true;\n});\n\nreturn courses.map(item => ({ json: item.json }));"
+        "jsCode": "const items = $input.all();\nconst courses = items.filter(item => item.json.id !== 1);\nreturn courses.map(item => ({ json: item.json }));"
       },
       "id": "filter-courses",
       "name": "Filter Courses",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        480,
-        0
-      ],
-      "notes": "Filters out site course (id=1). Processes all other courses automatically."
+      "position": [480, 0]
     },
     {
-      "parameters": {
-        "options": {}
-      },
+      "parameters": { "options": {} },
       "id": "loop-courses",
       "name": "Loop Courses",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [
-        720,
-        0
-      ],
-      "notes": "Iterates over courses one at a time."
+      "position": [720, 0]
     },
     {
       "parameters": {
@@ -89,22 +63,10 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "wstoken",
-              "value": "={{ $env.MOODLE_WS_TOKEN }}"
-            },
-            {
-              "name": "wsfunction",
-              "value": "core_course_get_contents"
-            },
-            {
-              "name": "courseid",
-              "value": "={{ $json.id }}"
-            },
-            {
-              "name": "moodlewsrestformat",
-              "value": "json"
-            }
+            { "name": "wstoken", "value": "={{ $env.MOODLE_WS_TOKEN }}" },
+            { "name": "wsfunction", "value": "core_course_get_contents" },
+            { "name": "courseid", "value": "={{ $json.id }}" },
+            { "name": "moodlewsrestformat", "value": "json" }
           ]
         },
         "options": {
@@ -120,39 +82,27 @@
       "name": "Get Course Contents",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        960,
-        240
-      ],
-      "notes": "Fetches all sections, modules, and file resources for the current course."
+      "position": [960, 240]
     },
     {
       "parameters": {
-        "jsCode": "const SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\n// Get course info from the Loop Courses node\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nconst namespace = rawShortname.toLowerCase().replace(/\\s+/g, '-');\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\nconst files = [];\n\nif (!Array.isArray(sections)) {\n  // API returned an error or unexpected format\n  return [{ json: { error: 'Unexpected response format', courseId, namespace, files: [] } }];\n}\n\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n\n      // Prefix filename with module ID to avoid collisions across sections\n      const uniqueFilename = `mod${mod.id}_${content.filename}`;\n\n      files.push({\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: uniqueFilename,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId: courseId,\n        namespace: namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files } }];"
+        "jsCode": "const SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nconst namespace = rawShortname.toLowerCase().replace(/\\s+/g, '-');\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\nif (!Array.isArray(sections)) {\n  return [{ json: { error: 'Unexpected response format', courseId, namespace, files: [] } }];\n}\n\nconst files = [];\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files } }];"
       },
       "id": "extract-files",
       "name": "Extract Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1200,
-        240
-      ],
-      "notes": "Parses course contents response, extracts downloadable files with supported MIME types, normalizes namespace from course shortname."
+      "position": [1200, 240]
     },
     {
       "parameters": {
-        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.courseFiles) {\n  staticData.courseFiles = {};\n}\n\nconst input = $input.first().json;\nconst namespace = input.namespace;\nconst courseId = input.courseId;\nconst currentFiles = input.files || [];\n\nconst storedFiles = staticData.courseFiles[namespace] || {};\n\nconst toIngest = [];    // new or updated files\nconst toDelete = [];    // removed files\nconst unchanged = [];   // no change\n\n// Build set of current file URLs for removal detection\nconst currentFileUrls = new Set(currentFiles.map(f => f.fileurl));\n\n// Check each current file against stored state\nfor (const file of currentFiles) {\n  const stored = storedFiles[file.fileurl];\n  if (!stored) {\n    // New file\n    toIngest.push({ ...file, action: 'new' });\n  } else if (stored.timemodified !== file.timemodified) {\n    // Updated file\n    toIngest.push({ ...file, action: 'updated', old_document_id: stored.document_id });\n  } else {\n    unchanged.push({ ...file, action: 'unchanged' });\n  }\n}\n\n// Check for removed files (in state but not in current contents)\nfor (const [fileurl, stored] of Object.entries(storedFiles)) {\n  if (!currentFileUrls.has(fileurl)) {\n    toDelete.push({\n      fileurl,\n      filename: stored.filename,\n      document_id: stored.document_id,\n      namespace,\n      action: 'removed'\n    });\n  }\n}\n\nreturn [{\n  json: {\n    courseId,\n    namespace,\n    toIngest,\n    toDelete,\n    unchanged,\n    summary: {\n      new: toIngest.filter(f => f.action === 'new').length,\n      updated: toIngest.filter(f => f.action === 'updated').length,\n      removed: toDelete.length,\n      unchanged: unchanged.length\n    }\n  }\n}];"
+        "jsCode": "const fs = require('fs');\nconst STATE_FILE = '/home/node/.n8n/moodle-ingest-state.json';\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) { return { courseFiles: {} }; } }\n\nconst state = readState();\nif (!state.courseFiles) state.courseFiles = {};\n\nconst input = $input.first().json;\nconst namespace = input.namespace;\nconst courseId = input.courseId;\nconst currentFiles = input.files || [];\nconst storedFiles = state.courseFiles[namespace] || {};\n\nconst toIngest = [];\nconst toDelete = [];\nconst unchanged = [];\nconst currentFileUrls = new Set(currentFiles.map(f => f.fileurl));\n\nfor (const file of currentFiles) {\n  const stored = storedFiles[file.fileurl];\n  if (!stored) {\n    toIngest.push({ ...file, action: 'new' });\n  } else if (stored.timemodified !== file.timemodified) {\n    toIngest.push({ ...file, action: 'updated', old_document_id: stored.document_id });\n  } else {\n    unchanged.push({ ...file, action: 'unchanged' });\n  }\n}\n\nfor (const [fileurl, stored] of Object.entries(storedFiles)) {\n  if (!currentFileUrls.has(fileurl)) {\n    toDelete.push({\n      fileurl,\n      filename: stored.filename,\n      document_id: stored.document_id,\n      namespace,\n      action: 'removed'\n    });\n  }\n}\n\nreturn [{\n  json: {\n    courseId,\n    namespace,\n    toIngest,\n    toDelete,\n    unchanged,\n    summary: {\n      new: toIngest.filter(f => f.action === 'new').length,\n      updated: toIngest.filter(f => f.action === 'updated').length,\n      removed: toDelete.length,\n      unchanged: unchanged.length\n    }\n  }\n}];"
       },
       "id": "dedup-diff",
       "name": "Dedup & Diff",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1440,
-        240
-      ],
-      "notes": "Compares current Moodle files against stored state in workflow static data. Classifies files as new, updated, removed, or unchanged."
+      "position": [1440, 240]
     },
     {
       "parameters": {
@@ -167,10 +117,7 @@
               "id": "has-deletions",
               "leftValue": "={{ $json.toDelete.length }}",
               "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
+              "operator": { "type": "number", "operation": "gt" }
             }
           ],
           "combinator": "and"
@@ -181,57 +128,17 @@
       "name": "Has Deletions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        1680,
-        240
-      ],
-      "notes": "Checks if there are files to delete from Vektra (removed from Moodle)."
+      "position": [1680, 240]
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst staticData = $getWorkflowStaticData('global');\nconst namespace = input.namespace;\nconst toDelete = input.toDelete || [];\n\nconst results = [];\n\nfor (const file of toDelete) {\n  if (file.document_id) {\n    results.push({\n      json: {\n        document_id: file.document_id,\n        namespace: file.namespace || namespace,\n        filename: file.filename,\n        fileurl: file.fileurl\n      }\n    });\n  }\n\n  // Remove from state\n  if (staticData.courseFiles && staticData.courseFiles[namespace]) {\n    delete staticData.courseFiles[namespace][file.fileurl];\n  }\n}\n\nif (results.length === 0) {\n  return [{ json: { message: 'No documents to delete', namespace } }];\n}\n\nreturn results;"
+        "jsCode": "// Handle all deletions inline and return a single item\nconst fs = require('fs');\nconst http = require('http');\nconst { URL } = require('url');\nconst STATE_FILE = '/home/node/.n8n/moodle-ingest-state.json';\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) { return { courseFiles: {} }; } }\nfunction writeState(s) { fs.writeFileSync(STATE_FILE, JSON.stringify(s)); }\n\nfunction httpReq(urlStr, options = {}) {\n  return new Promise((resolve, reject) => {\n    const url = new URL(urlStr);\n    const opts = { hostname: url.hostname, port: url.port || 80, path: url.pathname + url.search, method: options.method || 'GET', headers: options.headers || {} };\n    const req = http.request(opts, (res) => { const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => resolve({ statusCode: res.statusCode, body: Buffer.concat(chunks) })); });\n    req.on('error', reject); req.setTimeout(60000, () => { req.destroy(new Error('Timeout')); });\n    if (options.body) req.write(options.body); req.end();\n  });\n}\n\nconst input = $input.first().json;\nconst state = readState();\nconst namespace = input.namespace;\nconst toDelete = input.toDelete || [];\n\nconst VEKTRA_API_URL = $env.VEKTRA_API_URL;\nconst VEKTRA_API_KEY = $env.VEKTRA_API_KEY;\n\nconst deleteResults = [];\n\nfor (const file of toDelete) {\n  if (file.document_id) {\n    try {\n      const delBody = JSON.stringify({ document_ids: [file.document_id], namespace: file.namespace || namespace });\n      await httpReq(`${VEKTRA_API_URL}/api/v1/documents/batch`, {\n        method: 'DELETE',\n        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${VEKTRA_API_KEY}`, 'Content-Length': Buffer.byteLength(delBody) },\n        body: delBody,\n      });\n      deleteResults.push({ filename: file.filename, status: 'deleted' });\n    } catch (e) {\n      deleteResults.push({ filename: file.filename, status: 'delete_failed', error: e.message });\n    }\n  }\n  if (state.courseFiles && state.courseFiles[namespace]) {\n    delete state.courseFiles[namespace][file.fileurl];\n  }\n}\nwriteState(state);\n\nreturn [{ json: { ...input, deleteResults } }];"
       },
-      "id": "prepare-deletions",
-      "name": "Prepare Deletions",
+      "id": "handle-deletions",
+      "name": "Handle Deletions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1920,
-        80
-      ],
-      "notes": "Prepares deletion payloads and removes entries from static data state."
-    },
-    {
-      "parameters": {
-        "method": "DELETE",
-        "url": "={{ $env.VEKTRA_API_URL }}/api/v1/documents/batch",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"document_ids\": [\"{{ $json.document_id }}\"],\n  \"namespace\": \"{{ $json.namespace }}\"\n}",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "id": "delete-removed",
-      "name": "DELETE Removed Docs",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2160,
-        80
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "name": "Vektra Auth"
-        }
-      },
-      "notes": "Calls DELETE /api/v1/documents/batch to remove documents that no longer exist in Moodle. Requires admin scope."
+      "position": [1920, 120]
     },
     {
       "parameters": {
@@ -244,12 +151,9 @@
           "conditions": [
             {
               "id": "has-ingestions",
-              "leftValue": "={{ $('Dedup & Diff').item.json.toIngest.length }}",
+              "leftValue": "={{ $json.toIngest.length }}",
               "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
+              "operator": { "type": "number", "operation": "gt" }
             }
           ],
           "combinator": "and"
@@ -260,220 +164,125 @@
       "name": "Has Ingestions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [
-        1680,
-        480
-      ],
-      "notes": "Checks if there are new or updated files to ingest."
+      "position": [2160, 360]
     },
     {
       "parameters": {
-        "jsCode": "// Process all files for this course: download from Moodle, upload to Vektra\nconst input = $('Dedup & Diff').item.json;\nconst toIngest = input.toIngest || [];\nconst namespace = input.namespace;\nconst courseId = input.courseId;\n\nconst MOODLE_WS_TOKEN = $env.MOODLE_WS_TOKEN;\nconst VEKTRA_API_URL = $env.VEKTRA_API_URL;\nconst VEKTRA_API_KEY = $env.VEKTRA_API_KEY;\nconst authHeader = { Authorization: `Bearer ${VEKTRA_API_KEY}` };\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.courseFiles) staticData.courseFiles = {};\nif (!staticData.courseFiles[namespace]) staticData.courseFiles[namespace] = {};\n\nconst results = [];\n\nfor (const file of toIngest) {\n  const uniqueFilename = `mod${file.moduleId}_${file.filename}`;\n  try {\n    // Step 1: If updated file, delete old version first\n    if (file.action === 'updated' && file.old_document_id) {\n      await this.helpers.httpRequest({\n        method: 'DELETE',\n        url: `${VEKTRA_API_URL}/api/v1/documents/batch`,\n        body: { document_ids: [file.old_document_id], namespace },\n        headers: { 'Content-Type': 'application/json', ...authHeader },\n      });\n    }\n\n    // Step 2: Download file from Moodle\n    const separator = file.fileurl.includes('?') ? '&' : '?';\n    const downloadUrl = `${file.fileurl}${separator}token=${MOODLE_WS_TOKEN}`;\n    const fileBuffer = await this.helpers.httpRequest({\n      method: 'GET',\n      url: downloadUrl,\n      encoding: 'arraybuffer',\n      returnFullResponse: true,\n    });\n\n    const contentType = fileBuffer.headers?.['content-type'] || '';\n    if (contentType.includes('application/json')) {\n      const errorBody = Buffer.from(fileBuffer.body).toString();\n      results.push({ file_name: uniqueFilename, namespace, courseId, action: file.action, status: 'failed', document_id: null, chunk_count: 0, error: 'Download failed: ' + errorBody.substring(0, 100) });\n      continue;\n    }\n\n    // Step 3: Upload to Vektra (manual multipart/form-data)\n    const boundary = '----n8nBoundary' + Date.now();\n    const fileData = Buffer.from(fileBuffer.body);\n    const header = `--${boundary}\\r\\nContent-Disposition: form-data; name=\"file\"; filename=\"${uniqueFilename}\"\\r\\nContent-Type: ${file.mimetype}\\r\\n\\r\\n`;\n    const footer = `\\r\\n--${boundary}--\\r\\n`;\n    const multipartBody = Buffer.concat([Buffer.from(header), fileData, Buffer.from(footer)]);\n\n    const ingestResponse = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${VEKTRA_API_URL}/api/v1/ingest?namespace=${encodeURIComponent(namespace)}`,\n      body: multipartBody,\n      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, ...authHeader },\n      returnFullResponse: true,\n    });\n\n    const statusCode = ingestResponse.statusCode;\n    const body = typeof ingestResponse.body === 'string' ? JSON.parse(ingestResponse.body) : ingestResponse.body;\n    const documentId = body.document_id || null;\n    const rawStatus = body.status || (statusCode >= 200 && statusCode < 300 ? 'completed' : 'failed');\n    const status = (['new', 'exists', 'alias'].includes(rawStatus) && documentId) ? 'completed' : rawStatus;\n    const chunkCount = body.chunk_count || 0;\n    const error = body.detail?.error?.message || body.error?.message || null;\n\n    // Step 4: Handle async (202) — poll for completion\n    if (statusCode === 202 && body.job_id) {\n      let pollStatus = 'processing';\n      let pollCount = 0;\n      while (pollStatus === 'processing' && pollCount < 60) {\n        await new Promise(resolve => setTimeout(resolve, 5000));\n        const pollResp = await this.helpers.httpRequest({\n          method: 'GET',\n          url: `${VEKTRA_API_URL}/api/v1/ingest/jobs/${body.job_id}/status`,\n          headers: authHeader,\n          returnFullResponse: true,\n        });\n        const pollBody = typeof pollResp.body === 'string' ? JSON.parse(pollResp.body) : pollResp.body;\n        pollStatus = pollBody.status;\n        pollCount++;\n      }\n    }\n\n    // Step 5: Update state\n    if (documentId && status === 'completed') {\n      staticData.courseFiles[namespace][file.fileurl] = {\n        timemodified: file.timemodified,\n        document_id: documentId,\n        filename: uniqueFilename,\n        last_synced: new Date().toISOString()\n      };\n    }\n\n    results.push({ file_name: uniqueFilename, namespace, courseId, action: file.action, status, document_id: documentId, chunk_count: chunkCount, error });\n  } catch (e) {\n    results.push({ file_name: uniqueFilename, namespace, courseId, action: file.action, status: 'failed', document_id: null, chunk_count: 0, error: e.message?.substring(0, 200) });\n  }\n}\n\nreturn [{ json: { courseResults: results, resultCount: results.length } }];"
+        "jsCode": "// Split toIngest array into individual items for the inner loop\nconst input = $input.first().json;\nconst toIngest = input.toIngest || [];\nconst namespace = input.namespace;\nconst courseId = input.courseId;\n\n// Stash deleteResults (if any) for Merge Course Results to pick up\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData._pendingDeletes) staticData._pendingDeletes = {};\nstaticData._pendingDeletes[namespace] = (input.deleteResults || []).map(d => ({\n  file_name: d.filename, namespace, courseId,\n  action: 'removed', status: d.status === 'deleted' ? 'completed' : 'failed',\n  error: d.error || null\n}));\n\nreturn toIngest.map(file => ({\n  json: {\n    ...file,\n    namespace,\n    courseId\n  }\n}));"
       },
-      "id": "ingest-files",
-      "name": "Ingest Files",
+      "id": "split-files",
+      "name": "Split Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1920,
-        480
-      ],
-      "notes": "Downloads files from Moodle and uploads to Vektra sequentially. Handles update (delete old + re-ingest), async polling, and state tracking. Returns aggregated results as a single item."
+      "position": [2400, 240]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "loop-files",
+      "name": "Loop Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2640, 240]
     },
     {
       "parameters": {
-        "jsCode": "// Merge results from all courses\n// Each input item has { courseResults: [...] } from Aggregate Results\nconst items = $input.all();\n\nlet totalNew = 0;\nlet totalUpdated = 0;\nlet totalRemoved = 0;\nlet totalUnchanged = 0;\nlet totalFailed = 0;\nconst details = [];\n\nfor (const item of items) {\n  const results = item.json.courseResults || [item.json];\n  for (const d of results) {\n    if (d.action === 'new' && (d.status === 'completed' || d.status === 'new')) totalNew++;\n    else if (d.action === 'updated' && (d.status === 'completed' || d.status === 'new')) totalUpdated++;\n    else if (d.action === 'removed') totalRemoved++;\n    else if (d.action === 'unchanged' || d.status === 'skipped') totalUnchanged++;\n    else if (d.status === 'failed' || d.status === 'timeout') totalFailed++;\n\n    if (d.file_name || d.filename) {\n      details.push({\n        file: d.file_name || d.filename,\n        namespace: d.namespace,\n        action: d.action || 'unknown',\n        status: d.status || 'n/a',\n        document_id: d.document_id || null,\n        error: d.error || null\n      });\n    }\n  }\n}\n\nconst summary = `Sync complete: ${totalNew} new, ${totalUpdated} updated, ${totalRemoved} removed, ${totalUnchanged} unchanged, ${totalFailed} failed`;\n\nconsole.log(summary);\n\nreturn [{\n  json: {\n    summary,\n    totals: { new: totalNew, updated: totalUpdated, removed: totalRemoved, unchanged: totalUnchanged, failed: totalFailed },\n    details\n  }\n}];"
+        "jsCode": "// Process a single file: download from Moodle, upload to Vektra\n// Uses native http module to avoid task runner RPC deadlocks\nconst http = require('http');\nconst { URL } = require('url');\nconst file = $input.first().json;\nconst namespace = file.namespace;\nconst courseId = file.courseId;\nconst uniqueFilename = file.uniqueFilename || `mod${file.moduleId}_${file.filename}`;\n\nconst MOODLE_WS_TOKEN = $env.MOODLE_WS_TOKEN;\nconst VEKTRA_API_URL = $env.VEKTRA_API_URL;\nconst VEKTRA_API_KEY = $env.VEKTRA_API_KEY;\n\nconst fs = require('fs');\nconst STATE_FILE = '/home/node/.n8n/moodle-ingest-state.json';\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) { return { courseFiles: {} }; } }\nfunction writeState(s) { fs.writeFileSync(STATE_FILE, JSON.stringify(s)); }\n\nfunction httpReq(urlStr, options = {}) {\n  return new Promise((resolve, reject) => {\n    const url = new URL(urlStr);\n    const opts = {\n      hostname: url.hostname, port: url.port || 80,\n      path: url.pathname + url.search, method: options.method || 'GET',\n      headers: options.headers || {},\n    };\n    const req = http.request(opts, (res) => {\n      const chunks = [];\n      res.on('data', c => chunks.push(c));\n      res.on('end', () => resolve({\n        statusCode: res.statusCode,\n        headers: res.headers,\n        body: Buffer.concat(chunks),\n      }));\n    });\n    req.on('error', reject);\n    req.setTimeout(600000, () => { req.destroy(new Error('Request timeout')); });\n    if (options.body) req.write(options.body);\n    req.end();\n  });\n}\n\ntry {\n  // Step 1: Delete old version if update\n  if (file.action === 'updated' && file.old_document_id) {\n    const delBody = JSON.stringify({ document_ids: [file.old_document_id], namespace });\n    await httpReq(`${VEKTRA_API_URL}/api/v1/documents/batch`, {\n      method: 'DELETE',\n      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${VEKTRA_API_KEY}`, 'Content-Length': Buffer.byteLength(delBody) },\n      body: delBody,\n    });\n  }\n\n  // Step 2: Download file from Moodle\n  const separator = file.fileurl.includes('?') ? '&' : '?';\n  const dlResp = await httpReq(`${file.fileurl}${separator}token=${MOODLE_WS_TOKEN}`);\n\n  if (dlResp.headers['content-type']?.includes('application/json')) {\n    return [{ json: {\n      file_name: uniqueFilename, namespace, courseId,\n      action: file.action, status: 'failed', document_id: null,\n      chunk_count: 0, error: 'Download failed: ' + dlResp.body.toString().substring(0, 100)\n    }}];\n  }\n\n  // Step 3: Upload to Vektra (multipart/form-data)\n  const boundary = '----n8nBoundary' + Date.now();\n  const header = `--${boundary}\\r\\nContent-Disposition: form-data; name=\"file\"; filename=\"${uniqueFilename}\"\\r\\nContent-Type: ${file.mimetype}\\r\\n\\r\\n`;\n  const footer = `\\r\\n--${boundary}--\\r\\n`;\n  const multipartBody = Buffer.concat([Buffer.from(header), dlResp.body, Buffer.from(footer)]);\n\n  const ingestResp = await httpReq(\n    `${VEKTRA_API_URL}/api/v1/ingest?namespace=${encodeURIComponent(namespace)}`,\n    {\n      method: 'POST',\n      headers: {\n        'Content-Type': `multipart/form-data; boundary=${boundary}`,\n        'Authorization': `Bearer ${VEKTRA_API_KEY}`,\n        'Content-Length': multipartBody.length,\n      },\n      body: multipartBody,\n    }\n  );\n\n  const body = JSON.parse(ingestResp.body.toString());\n  const documentId = body.document_id || null;\n  const rawStatus = body.status || (ingestResp.statusCode >= 200 && ingestResp.statusCode < 300 ? 'completed' : 'failed');\n  const status = (['new', 'exists', 'alias'].includes(rawStatus) && documentId) ? 'completed' : rawStatus;\n  const chunkCount = body.chunk_count || 0;\n  const error = body.detail?.error?.message || body.error?.message || null;\n\n  // Step 4: Update state on success (file-based persistence)\n  if (documentId && status === 'completed') {\n    const state = readState();\n    if (!state.courseFiles) state.courseFiles = {};\n    if (!state.courseFiles[namespace]) state.courseFiles[namespace] = {};\n    state.courseFiles[namespace][file.fileurl] = {\n      timemodified: file.timemodified,\n      document_id: documentId,\n      filename: uniqueFilename,\n      last_synced: new Date().toISOString()\n    };\n    writeState(state);\n  }\n\n  return [{ json: {\n    file_name: uniqueFilename, namespace, courseId,\n    action: file.action, status, document_id: documentId,\n    chunk_count: chunkCount, error\n  }}];\n} catch (e) {\n  return [{ json: {\n    file_name: uniqueFilename, namespace, courseId,\n    action: file.action, status: 'failed', document_id: null,\n    chunk_count: 0, error: e.message?.substring(0, 200)\n  }}];\n}"
       },
-      "id": "ingestion-summary",
-      "name": "Ingestion Summary",
+      "id": "process-single-file",
+      "name": "Process Single File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        5280,
-        0
-      ],
-      "notes": "Aggregates results from all courses and produces a summary."
+      "position": [2880, 480]
     },
     {
       "parameters": {
-        "jsCode": "// No files to ingest for this course — return single aggregated item\nconst input = $('Dedup & Diff').item.json;\nconst unchangedFiles = (input.unchanged || []).map(f => ({\n  file_name: f.uniqueFilename || f.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'unchanged',\n  status: 'skipped'\n}));\n\nreturn [{ json: { courseResults: unchangedFiles, resultCount: unchangedFiles.length } }];"
+        "jsCode": "// Collapse all file results from inner loop into 1 item\n// This ensures Loop Courses advances by exactly 1\nconst items = $input.all();\nconst results = items.map(item => item.json);\n\n// Include deletion results stashed by Split Files\nconst namespace = results[0]?.namespace;\nconst staticData = $getWorkflowStaticData('global');\nconst deleteItems = (staticData._pendingDeletes?.[namespace]) || [];\nif (staticData._pendingDeletes?.[namespace]) delete staticData._pendingDeletes[namespace];\n\nconst allResults = [...deleteItems, ...results];\nreturn [{ json: { courseResults: allResults, resultCount: allResults.length } }];"
+      },
+      "id": "merge-course-results",
+      "name": "Merge Course Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No files to ingest — return single item with unchanged and deletion info\nconst input = $input.first().json;\nconst unchangedFiles = (input.unchanged || []).map(f => ({\n  file_name: f.uniqueFilename || f.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'unchanged',\n  status: 'skipped'\n}));\nconst deleteItems = (input.deleteResults || []).map(d => ({\n  file_name: d.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'removed',\n  status: d.status === 'deleted' ? 'completed' : 'failed',\n  error: d.error || null\n}));\nconst allResults = [...deleteItems, ...unchangedFiles];\nreturn [{ json: { courseResults: allResults, resultCount: allResults.length } }];"
       },
       "id": "no-changes",
       "name": "No Changes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2160,
-        720
-      ],
-      "notes": "Passes through unchanged file info when there is nothing to ingest."
+      "position": [2400, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results from all courses\nconst items = $input.all();\n\nlet totalNew = 0, totalUpdated = 0, totalRemoved = 0;\nlet totalUnchanged = 0, totalFailed = 0;\nconst details = [];\n\nfor (const item of items) {\n  const results = item.json.courseResults || [item.json];\n  for (const d of results) {\n    if (d.action === 'new' && (d.status === 'completed' || d.status === 'new')) totalNew++;\n    else if (d.action === 'updated' && (d.status === 'completed' || d.status === 'new')) totalUpdated++;\n    else if (d.action === 'removed') totalRemoved++;\n    else if (d.action === 'unchanged' || d.status === 'skipped') totalUnchanged++;\n    else if (d.status === 'failed' || d.status === 'timeout') totalFailed++;\n\n    if (d.file_name || d.filename) {\n      details.push({\n        file: d.file_name || d.filename,\n        namespace: d.namespace,\n        action: d.action || 'unknown',\n        status: d.status || 'n/a',\n        document_id: d.document_id || null,\n        error: d.error || null\n      });\n    }\n  }\n}\n\nconst summary = `Sync complete: ${totalNew} new, ${totalUpdated} updated, ${totalRemoved} removed, ${totalUnchanged} unchanged, ${totalFailed} failed`;\nconsole.log(summary);\n\nreturn [{\n  json: {\n    summary,\n    totals: { new: totalNew, updated: totalUpdated, removed: totalRemoved, unchanged: totalUnchanged, failed: totalFailed },\n    details\n  }\n}];"
+      },
+      "id": "ingestion-summary",
+      "name": "Ingestion Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3360, 0]
     }
   ],
   "pinData": {},
   "connections": {
     "Schedule Trigger": {
-      "main": [
-        [
-          {
-            "node": "Get Courses",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Get Courses", "type": "main", "index": 0 }]]
     },
     "Get Courses": {
-      "main": [
-        [
-          {
-            "node": "Filter Courses",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Filter Courses", "type": "main", "index": 0 }]]
     },
     "Filter Courses": {
-      "main": [
-        [
-          {
-            "node": "Loop Courses",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
     },
     "Loop Courses": {
       "main": [
-        [
-          {
-            "node": "Ingestion Summary",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Get Course Contents",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Ingestion Summary", "type": "main", "index": 0 }],
+        [{ "node": "Get Course Contents", "type": "main", "index": 0 }]
       ]
     },
     "Get Course Contents": {
-      "main": [
-        [
-          {
-            "node": "Extract Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Extract Files", "type": "main", "index": 0 }]]
     },
     "Extract Files": {
-      "main": [
-        [
-          {
-            "node": "Dedup & Diff",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Dedup & Diff", "type": "main", "index": 0 }]]
     },
     "Dedup & Diff": {
-      "main": [
-        [
-          {
-            "node": "Has Deletions?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Has Deletions?", "type": "main", "index": 0 }]]
     },
     "Has Deletions?": {
       "main": [
-        [
-          {
-            "node": "Prepare Deletions",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Has Ingestions?",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Handle Deletions", "type": "main", "index": 0 }],
+        [{ "node": "Has Ingestions?", "type": "main", "index": 0 }]
       ]
     },
-    "Prepare Deletions": {
-      "main": [
-        [
-          {
-            "node": "DELETE Removed Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "DELETE Removed Docs": {
-      "main": [
-        [
-          {
-            "node": "Has Ingestions?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Handle Deletions": {
+      "main": [[{ "node": "Has Ingestions?", "type": "main", "index": 0 }]]
     },
     "Has Ingestions?": {
       "main": [
-        [
-          {
-            "node": "Ingest Files",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No Changes",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Split Files", "type": "main", "index": 0 }],
+        [{ "node": "No Changes", "type": "main", "index": 0 }]
       ]
     },
-    "Ingest Files": {
+    "Split Files": {
+      "main": [[{ "node": "Loop Files", "type": "main", "index": 0 }]]
+    },
+    "Loop Files": {
       "main": [
-        [
-          {
-            "node": "Loop Courses",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Merge Course Results", "type": "main", "index": 0 }],
+        [{ "node": "Process Single File", "type": "main", "index": 0 }]
       ]
+    },
+    "Process Single File": {
+      "main": [[{ "node": "Loop Files", "type": "main", "index": 0 }]]
+    },
+    "Merge Course Results": {
+      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
     },
     "No Changes": {
-      "main": [
-        [
-          {
-            "node": "Loop Courses",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
     }
   },
   "active": false,

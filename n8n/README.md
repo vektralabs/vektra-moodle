@@ -114,18 +114,11 @@ docker network connect docker_default n8n-n8n-1
 3. Go to **Workflows** > **Add workflow** > **Import from file**
 4. Select `workflows/moodle-ingest.json`
 
-### Step 8: Configure Credentials in n8n
+### Step 8: Activate and Test
 
-1. In the imported workflow, click on any **POST /ingest** or **DELETE** node
-2. Under **Credential for Header Auth**, click **Create New Credential**
-   - Name: `Vektra Auth`
-   - Header Name: `Authorization`
-   - Header Value: `Bearer <your-vektra-api-key>`
-3. Save and assign this credential to all HTTP nodes that use it
-
-### Step 9: Activate Workflow
-
-Toggle the workflow to **Active** in the n8n UI.
+1. Click **Execute workflow** to run a manual test
+2. Check the **Ingestion Summary** node output
+3. Toggle the workflow to **Active** (click **Publish**) for scheduled execution
 
 > **Note**: The workflow reads configuration from Docker container environment variables (set in `.env`), not from n8n's built-in Variables feature.
 
@@ -146,10 +139,26 @@ Toggle the workflow to **Active** in the n8n UI.
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Moodle | `http://vektra-moodle:10180` (add `127.0.0.1 vektra-moodle` to hosts file) | admin / Admin123! |
+| Moodle | `http://vektra-moodle` | admin / Admin123! |
 | Vektra API | `http://localhost:8000` | — |
 | n8n | `http://localhost:5678` | Set during first access |
-| Moodle courses | All courses synced automatically | — |
+
+#### Hosts file configuration
+
+Moodle's `$CFG->wwwroot` (the base URL in `config.php`) must be a single hostname that works both for **n8n inside Docker** and for the **browser on the host machine**. Moodle uses this URL to generate all internal links, CSS paths, and file download URLs (`pluginfile.php`).
+
+The hostname `vektra-moodle` is the Docker container name. n8n reaches it via Docker networking. The browser on the host doesn't know this name, so you need to add it to the hosts file:
+
+- **Windows**: edit `C:\Windows\System32\drivers\etc\hosts` (as Administrator)
+- **macOS/Linux**: edit `/etc/hosts`
+
+Add this line:
+
+```
+127.0.0.1 vektra-moodle
+```
+
+The Moodle container maps port 80 to the host (`127.0.0.1:80:80` in docker-compose), so `http://vektra-moodle` resolves to the local Moodle instance from both Docker and the browser.
 
 ## Configuration
 
@@ -163,7 +172,11 @@ Change `INGEST_CRON` in `.env` and restart n8n. Examples:
 
 ### Supported File Types
 
-The workflow only processes files with these MIME types:
+The workflow only processes files uploaded as **File resources** (`mod_resource`) in Moodle. Files embedded inline in Page activities (`mod_page`), labels, or other content types are **not** detected.
+
+To upload files correctly: in the course, click **Add an activity or resource** → **File**.
+
+Supported MIME types:
 - PDF (`application/pdf`)
 - DOCX (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`)
 - PPTX (`application/vnd.openxmlformats-officedocument.presentationml.presentation`)
@@ -192,12 +205,15 @@ The workflow only processes files with these MIME types:
 
 A file with the same name but different content already exists in the namespace. The workflow prefixes filenames with the Moodle module ID (`mod123_filename.pdf`) to avoid this. If it still occurs, clear the workflow static data (Settings > Static Data > Clear) and re-run.
 
-### Workflow static data reset
+### Force re-processing of all files
 
-To force re-processing of all files, clear the workflow static data:
-1. Open the workflow in n8n
-2. Go to **Settings** (gear icon) > **Static Data**
-3. Clear the data and save
+The workflow tracks ingested files in a JSON state file. To force re-processing:
+
+```bash
+docker exec n8n-n8n-1 sh -c 'rm -f /home/node/.n8n/moodle-ingest-state.json'
+```
+
+On the next run, all files will be re-downloaded and re-uploaded. Vektra will recognize already-ingested files (status `exists`) and not re-process them.
 
 ## Deployment to Production
 
