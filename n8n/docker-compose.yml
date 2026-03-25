@@ -15,7 +15,6 @@ services:
       - VEKTRA_API_URL=${VEKTRA_API_URL:-http://vektra-stack-vektra-1:8000}
       - VEKTRA_API_KEY=${VEKTRA_API_KEY}
       - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
-      - MOODLE_COURSE_IDS=${MOODLE_COURSE_IDS}
     volumes:
       - n8n_data:/home/node/.n8n
     networks:

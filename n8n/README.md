@@ -17,7 +17,7 @@ Vektra API (vektra-stack)
 
 The workflow runs on a configurable schedule (default: every 5 minutes) and:
 
-1. Fetches all courses from Moodle (or a filtered subset)
+1. Fetches all courses from Moodle
 2. For each course, retrieves file resources from all sections
 3. Compares against stored state to detect new, updated, and removed files
 4. Downloads new/updated files and ingests them into Vektra
@@ -81,12 +81,11 @@ Edit `.env` with your values:
 |----------|-------------|
 | `N8N_PORT` | n8n UI port (default: 5678) |
 | `N8N_ENCRYPTION_KEY` | Random string for n8n credential encryption |
-| `MOODLE_URL` | Moodle base URL (Docker: `http://vektra-moodle`, host: `http://localhost:10180`) |
+| `MOODLE_URL` | Moodle base URL (must match `$CFG->wwwroot`, default: `http://vektra-moodle`) |
 | `MOODLE_WS_TOKEN` | Token from Step 2 |
 | `VEKTRA_API_URL` | Vektra API URL (Docker: `http://vektra-stack-vektra-1:8000`, host: `http://localhost:8000`) |
 | `VEKTRA_API_KEY` | API key from Step 3 |
 | `INGEST_CRON` | Cron expression (default: `*/5 * * * *`) |
-| `MOODLE_COURSE_IDS` | Optional comma-separated course IDs to filter (empty = all) |
 
 ### Step 5: Start n8n
 
@@ -124,21 +123,11 @@ docker network connect docker_default n8n-n8n-1
    - Header Value: `Bearer <your-vektra-api-key>`
 3. Save and assign this credential to all HTTP nodes that use it
 
-### Step 9: Set n8n Environment Variables
-
-In the n8n UI, go to **Settings > Variables** and create:
-
-| Variable | Value |
-|----------|-------|
-| `MOODLE_URL` | `http://vektra-moodle` (or your Moodle URL) |
-| `MOODLE_WS_TOKEN` | Your Moodle WS token |
-| `VEKTRA_API_URL` | `http://vektra-stack-vektra-1:8000` (or your Vektra URL) |
-| `INGEST_CRON` | `*/5 * * * *` (or your preferred schedule) |
-| `MOODLE_COURSE_IDS` | Empty (all courses) or comma-separated IDs (e.g., `6,7,8`) |
-
-### Step 10: Activate Workflow
+### Step 9: Activate Workflow
 
 Toggle the workflow to **Active** in the n8n UI.
+
+> **Note**: The workflow reads configuration from Docker container environment variables (set in `.env`), not from n8n's built-in Variables feature.
 
 ## Testing
 
@@ -157,24 +146,20 @@ Toggle the workflow to **Active** in the n8n UI.
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Moodle | `http://localhost:10180` | admin / Admin123! |
+| Moodle | `http://vektra-moodle:10180` (add `127.0.0.1 vektra-moodle` to hosts file) | admin / Admin123! |
 | Vektra API | `http://localhost:8000` | — |
 | n8n | `http://localhost:5678` | Set during first access |
-| Moodle courses | IDs: 6, 7, 8 | — |
+| Moodle courses | All courses synced automatically | — |
 
 ## Configuration
 
 ### Polling Interval
 
-Change `INGEST_CRON` in n8n variables. Examples:
+Change `INGEST_CRON` in `.env` and restart n8n. Examples:
 - `*/5 * * * *` — every 5 minutes (default)
 - `*/30 * * * *` — every 30 minutes
 - `0 * * * *` — every hour
 - `0 2 * * *` — daily at 2 AM
-
-### Course Filtering
-
-Set `MOODLE_COURSE_IDS` to a comma-separated list of Moodle course IDs (e.g., `6,7,8`). Leave empty to sync all courses.
 
 ### Supported File Types
 
@@ -201,7 +186,7 @@ The workflow only processes files with these MIME types:
 ### "Access control exception" on file download
 
 - Ensure the external service has **Can download files** enabled (Edit service > tick the checkbox)
-- Ensure `$CFG->wwwroot` in Moodle's `config.php` matches the hostname used by n8n (e.g., `http://vektra-moodle`). If it's set to `http://localhost:PORT`, Moodle will redirect requests from n8n and file downloads will fail
+- `MOODLE_URL` must match Moodle's `$CFG->wwwroot` exactly. Both should use the Docker container name (e.g., `http://vektra-moodle`)
 
 ### 409 Conflict on ingest
 
