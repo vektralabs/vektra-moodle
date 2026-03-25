@@ -61,7 +61,15 @@ The plugin source is bind-mounted read-only from the repo root into the Moodle
 container at `/var/www/html/public/blocks/vektra/`. PHP changes are reflected
 immediately without rebuild.
 
-To clear Moodle caches after changing plugin metadata:
+After changing `version.php` or plugin metadata, run the upgrade CLI to register
+the new version in Moodle's database (otherwise Moodle waits until the admin
+visits the home page):
+
+```bash
+docker exec vektra-moodle php /var/www/html/admin/cli/upgrade.php --non-interactive
+```
+
+To clear Moodle caches after other plugin changes:
 
 ```bash
 docker exec vektra-moodle php /var/www/html/admin/cli/purge_caches.php
