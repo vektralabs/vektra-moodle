@@ -18,6 +18,8 @@ services:
       - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
     volumes:
       - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - default
 
