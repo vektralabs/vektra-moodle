@@ -22,6 +22,8 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - default
+      - vektra_stack
+      - moodle
 
 volumes:
   n8n_data:
@@ -29,3 +31,9 @@ volumes:
 networks:
   default:
     name: n8n_default
+  vektra_stack:
+    name: vektra-stack_default
+    external: true
+  moodle:
+    name: docker_default
+    external: true

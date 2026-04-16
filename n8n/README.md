@@ -93,28 +93,23 @@ Edit `.env` with your values:
 docker compose up -d
 ```
 
-### Step 6: Connect Docker Networks
+n8n joins the `vektra-stack_default` and `docker_default` networks automatically
+(declared as `external` in `docker-compose.yml`). Make sure both vektra-stack
+and vektra-moodle are running first, otherwise startup will fail.
 
-n8n needs to reach both the Vektra API and Moodle containers. Connect it to their networks:
+> **Note**: If your `vektra-stack` or `vektra-moodle` compose files use project
+> names that produce different network names (e.g. due to a non-default
+> directory layout), adjust the `external` network names in
+> `n8n/docker-compose.yml`. Check with `docker network ls`.
 
-```bash
-# Connect to vektra-stack network (for Vektra API)
-docker network connect vektra-stack_default n8n-n8n-1
-
-# Connect to vektra-moodle network (for Moodle)
-docker network connect docker_default n8n-n8n-1
-```
-
-> **Note**: Container and network names may vary. Use `docker network ls` and `docker ps` to verify.
-
-### Step 7: Import Workflow
+### Step 6: Import Workflow
 
 1. Open n8n at `http://localhost:5678`
 2. Complete the initial setup (create owner account)
 3. Go to **Workflows** > **Add workflow** > **Import from file**
 4. Select `workflows/moodle-ingest.json`
 
-### Step 8: Activate and Test
+### Step 7: Activate and Test
 
 1. Click **Execute workflow** to run a manual test
 2. Check the **Ingestion Summary** node output
