@@ -22,24 +22,24 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['pluginname'] = 'Assistente AI Vektra';
-$string['vektra:addinstance'] = 'Aggiungere un blocco Assistente AI Vektra';
-$string['vektra:usechatbot'] = 'Usare il chatbot AI Vektra';
+$string['pluginname'] = 'AI Tutor';
+$string['vektra:addinstance'] = 'Aggiungere un blocco AI Tutor';
+$string['vektra:usechatbot'] = 'Usare il chatbot AI Tutor';
 
 // Block content.
 $string['widgetactive'] = 'L\'Assistente AI è attivo. Cerca il pulsante chat nell\'angolo in basso a destra.';
-$string['notconfigured'] = 'Vektra non è configurato. Vai su Amministrazione del sito > Plugin > Blocchi > Assistente AI Vektra.';
-$string['tokenerror'] = 'Impossibile connettersi all\'API Vektra. Controlla URL e chiave API nelle impostazioni del plugin.';
+$string['notconfigured'] = 'AI Tutor non è configurato. Vai su Amministrazione del sito > Plugin > Blocchi > AI Tutor.';
+$string['tokenerror'] = 'Impossibile connettersi all\'API AI Tutor. Controlla URL e chiave API nelle impostazioni del plugin.';
 
 // Global settings.
 $string['settings_connection'] = 'Connessione';
-$string['settings_connection_desc'] = 'Configura la connessione alla tua istanza Vektra.';
-$string['settings_apiurl'] = 'URL API Vektra';
-$string['settings_apiurl_desc'] = 'URL base della tua istanza Vektra (es. https://vektra.example.com). Non includere lo slash finale.';
+$string['settings_connection_desc'] = 'Configura la connessione alla tua istanza AI Tutor.';
+$string['settings_apiurl'] = 'URL API AI Tutor';
+$string['settings_apiurl_desc'] = 'URL base della tua istanza AI Tutor (es. https://ai-tutor.example.com). Non includere lo slash finale.';
 $string['settings_publicurl'] = 'URL pubblica (browser)';
 $string['settings_publicurl_desc'] = 'URL accessibile dal browser dell\'utente per caricare il widget e inviare le query. Lascia vuoto se l\'URL API è già raggiungibile dal browser. Necessario solo quando l\'URL server differisce (es. hostname Docker interno).';
 $string['settings_apikey'] = 'Chiave API';
-$string['settings_apikey_desc'] = 'Chiave API Vektra con scope admin. Necessaria per generare i token degli studenti.';
+$string['settings_apikey_desc'] = 'Chiave API AI Tutor con scope admin. Necessaria per generare i token degli studenti.';
 $string['settings_widget'] = 'Widget - Impostazioni predefinite';
 $string['settings_widget_desc'] = 'Impostazioni predefinite per l\'aspetto del widget chatbot. Possono essere sovrascritte per ogni corso.';
 $string['settings_theme'] = 'Tema predefinito';
@@ -49,9 +49,9 @@ $string['theme_dark'] = 'Scuro';
 
 // Instance settings.
 $string['config_title'] = 'Titolo blocco';
-$string['config_course_id'] = 'ID corso Vektra';
-$string['config_course_id_help'] = 'L\'identificativo del corso in Vektra. Lascia vuoto per usare il nome breve del corso Moodle. Deve corrispondere al course_id usato durante l\'ingestion dei materiali in Vektra.';
-$string['config_namespace'] = 'Namespace Vektra';
+$string['config_course_id'] = 'ID corso AI Tutor';
+$string['config_course_id_help'] = 'L\'identificativo del corso. Lascia vuoto per usare il nome breve del corso Moodle. Deve corrispondere al course_id usato durante l\'ingestion dei materiali nel tutor.';
+$string['config_namespace'] = 'Namespace AI Tutor';
 $string['config_namespace_help'] = 'Sovrascrivere il namespace incluso nel token JWT (max 64 caratteri). Lascia vuoto per usare il course ID come namespace predefinito. Utile quando più corsi condividono gli stessi materiali o quando il nome breve Moodle contiene caratteri non validi per un namespace.';
 $string['config_theme'] = 'Tema';
 $string['config_language'] = 'Lingua';
@@ -62,4 +62,4 @@ $string['usedefault'] = 'Usa predefinito';
 $string['invalidblockinstance'] = 'Istanza del blocco non valida per questo corso.';
 
 // Privacy.
-$string['privacy:metadata'] = 'Il blocco Assistente AI Vektra non memorizza dati personali. I token sono generati tramite l\'API Vektra esterna e conservati solo nella sessione PHP.';
+$string['privacy:metadata'] = 'Il blocco AI Tutor non memorizza dati personali. I token sono generati tramite l\'API AI Tutor esterna e conservati solo nella sessione PHP.';

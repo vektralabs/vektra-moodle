@@ -22,24 +22,24 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['pluginname'] = 'Vektra AI Assistant';
-$string['vektra:addinstance'] = 'Add a Vektra AI Assistant block';
-$string['vektra:usechatbot'] = 'Use the Vektra AI chatbot';
+$string['pluginname'] = 'AI Tutor';
+$string['vektra:addinstance'] = 'Add an AI Tutor block';
+$string['vektra:usechatbot'] = 'Use the AI Tutor chatbot';
 
 // Block content.
 $string['widgetactive'] = 'AI Assistant is active. Look for the chat button in the bottom-right corner.';
-$string['notconfigured'] = 'Vektra is not configured. Go to Site administration > Plugins > Blocks > Vektra AI Assistant.';
-$string['tokenerror'] = 'Could not connect to Vektra API. Check the API URL and key in plugin settings.';
+$string['notconfigured'] = 'AI Tutor is not configured. Go to Site administration > Plugins > Blocks > AI Tutor.';
+$string['tokenerror'] = 'Could not connect to AI Tutor API. Check the API URL and key in plugin settings.';
 
 // Global settings.
 $string['settings_connection'] = 'Connection';
-$string['settings_connection_desc'] = 'Configure the connection to your Vektra instance.';
-$string['settings_apiurl'] = 'Vektra API URL';
-$string['settings_apiurl_desc'] = 'Base URL of your Vektra instance (e.g., https://vektra.example.com). Do not include a trailing slash.';
+$string['settings_connection_desc'] = 'Configure the connection to your AI Tutor instance.';
+$string['settings_apiurl'] = 'AI Tutor API URL';
+$string['settings_apiurl_desc'] = 'Base URL of your AI Tutor instance (e.g., https://ai-tutor.example.com). Do not include a trailing slash.';
 $string['settings_publicurl'] = 'Public URL (browser)';
 $string['settings_publicurl_desc'] = 'URL accessible from the user\'s browser for loading the widget and making queries. Leave empty if the API URL is already browser-accessible. Only needed when the server-side API URL differs (e.g., Docker internal hostname).';
 $string['settings_apikey'] = 'API Key';
-$string['settings_apikey_desc'] = 'Vektra API key with admin scope. Required for generating student tokens.';
+$string['settings_apikey_desc'] = 'AI Tutor API key with admin scope. Required for generating student tokens.';
 $string['settings_widget'] = 'Widget defaults';
 $string['settings_widget_desc'] = 'Default appearance settings for the chatbot widget. These can be overridden per course.';
 $string['settings_theme'] = 'Default theme';
@@ -49,9 +49,9 @@ $string['theme_dark'] = 'Dark';
 
 // Instance settings.
 $string['config_title'] = 'Block title';
-$string['config_course_id'] = 'Vektra course ID';
-$string['config_course_id_help'] = 'The course identifier in Vektra. Leave empty to use the Moodle course short name. Must match the course_id used when ingesting materials into Vektra.';
-$string['config_namespace'] = 'Vektra namespace';
+$string['config_course_id'] = 'AI Tutor course ID';
+$string['config_course_id_help'] = 'The course identifier. Leave empty to use the Moodle course short name. Must match the course_id used when ingesting materials into AI Tutor.';
+$string['config_namespace'] = 'AI Tutor namespace';
 $string['config_namespace_help'] = 'Override the namespace included in the JWT token (max 64 characters). Leave empty to let the API default to the course ID. Useful when multiple courses share the same materials or when the Moodle short name contains characters not valid as a namespace.';
 $string['config_theme'] = 'Theme';
 $string['config_language'] = 'Language';
@@ -62,4 +62,4 @@ $string['usedefault'] = 'Use default';
 $string['invalidblockinstance'] = 'Invalid block instance for this course.';
 
 // Privacy.
-$string['privacy:metadata'] = 'The Vektra AI Assistant block does not store any personal data. Tokens are generated via the external Vektra API and cached only in the PHP session.';
+$string['privacy:metadata'] = 'The AI Tutor block does not store any personal data. Tokens are generated via the external AI Tutor API and cached only in the PHP session.';
