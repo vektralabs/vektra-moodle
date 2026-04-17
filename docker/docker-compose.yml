@@ -23,8 +23,9 @@ services:
     container_name: vektra-moodle
     ports:
       - "127.0.0.1:${MOODLE_PORT:-10180}:80"
+      - "127.0.0.1:80:80"
     environment:
-      MOODLE_URL: "http://localhost:${MOODLE_PORT:-10180}"
+      MOODLE_URL: "${MOODLE_URL:-http://vektra-moodle}"
       DB_HOST: mariadb
       DB_NAME: ${DB_NAME:-moodle}
       DB_USER: ${DB_USER:-moodleuser}
