@@ -117,6 +117,16 @@ and vektra-moodle are running first, otherwise startup will fail.
 
 > **Note**: The workflow reads configuration from Docker container environment variables (set in `.env`), not from n8n's built-in Variables feature.
 
+> **Upgrading from n8n 1.x**: if you previously activated this workflow on
+> n8n 1.x and upgraded the container to 2.x, the schedule trigger will not
+> fire until the workflow is explicitly published under the new state model.
+> Run once and restart the container:
+> ```bash
+> docker compose exec n8n n8n publish:workflow --id=<workflow-id>
+> docker compose restart n8n
+> ```
+> Fresh installs importing the JSON via the UI are not affected.
+
 ## Testing
 
 1. Upload a PDF file to a Moodle course as a **File** resource
