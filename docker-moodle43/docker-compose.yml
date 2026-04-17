@@ -1,0 +1,50 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: vektra-moodle43-mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-moodle_root}
+      MYSQL_DATABASE: ${DB_NAME:-moodle}
+      MYSQL_USER: ${DB_USER:-moodleuser}
+      MYSQL_PASSWORD: ${DB_PASS:-moodlepass}
+    volumes:
+      - m43_mariadb_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:${MARIADB_PORT:-10406}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  moodle:
+    build: .
+    container_name: vektra-moodle43
+    ports:
+      - "${MOODLE_PORT:-8080}:80"
+    environment:
+      MOODLE_URL: "${MOODLE_URL:-http://localhost:8080}"
+      DB_HOST: mariadb
+      DB_NAME: ${DB_NAME:-moodle}
+      DB_USER: ${DB_USER:-moodleuser}
+      DB_PASS: ${DB_PASS:-moodlepass}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS:-Admin123!}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+    volumes:
+      - m43_moodle_data:/var/moodledata
+      - ./php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+      # Plugin bind-mount: intera repo del plugin in read-only
+      - ../:/var/www/html/blocks/vektra:ro
+      # Override di version.php per dichiarare supporto a Moodle 4.3
+      # (il version.php della root dichiara solo 5.1, quindi senza questo
+      # override Moodle 4.3 rifiuterebbe l'installazione).
+      - ./version.php:/var/www/html/blocks/vektra/version.php:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+volumes:
+  m43_mariadb_data:
+  m43_moodle_data:
