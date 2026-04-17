@@ -30,7 +30,7 @@ RUN a2enmod rewrite
 # Download Moodle 5.1 (branch stable501) with checksum verification.
 # Update MOODLE_TGZ_SHA256 when upgrading Moodle version.
 ARG MOODLE_TGZ_URL=https://download.moodle.org/download.php/direct/stable501/moodle-latest-501.tgz
-ARG MOODLE_TGZ_SHA256=bdc98f85c9e0cbf2d55d61e9c581516b79d962b9315623099733695d53a1d25a
+ARG MOODLE_TGZ_SHA256=6ad582be894f7158b211ec180241927a8e919cec4ac0834a0582d71c8faf4626
 RUN cd /tmp && \
     curl -fsSL -o moodle.tgz "${MOODLE_TGZ_URL}" && \
     echo "${MOODLE_TGZ_SHA256}  moodle.tgz" | sha256sum -c - && \
