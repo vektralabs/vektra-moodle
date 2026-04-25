@@ -140,10 +140,15 @@ class block_vektra extends block_base {
             return;
         }
 
-        // Resolve namespace from the just-saved data, falling back to course shortname.
+        // Resolve namespace from the just-saved data, mirroring the backend default
+        // chain (explicit override > course_id override > course shortname). The
+        // backend uses course_id as the implicit namespace when none is sent on the
+        // JWT path, so admin GET/PATCH must target the same identifier.
         $namespace = '';
         if (!empty($data->namespace)) {
             $namespace = (string) $data->namespace;
+        } else if (!empty($data->course_id)) {
+            $namespace = (string) $data->course_id;
         } else if (!empty($this->page->course->shortname)) {
             $namespace = (string) $this->page->course->shortname;
         }
