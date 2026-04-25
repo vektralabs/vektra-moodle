@@ -89,9 +89,13 @@ class block_vektra extends block_base {
      * @param bool $nolongerused Unused parameter kept for parent signature compatibility.
      */
     public function instance_config_save($data, $nolongerused = false) {
-        // Capture the form-open marker, then strip it so it does not pollute configdata.
-        $getok = (int) ($data->get_ok ?? 0);
-        unset($data->get_ok);
+        // Capture transient and backend-only fields, then strip them from $data so
+        // the parent does not serialize them into configdata. Behavioral fields live
+        // on the Vektra backend; the form-open marker is per-request only.
+        $getok       = (int) ($data->get_ok ?? 0);
+        $grounding   = $data->grounding_mode ?? 'inherit';
+        $showsources = $data->show_sources_choice ?? 'inherit';
+        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice);
 
         // Always persist configdata first so the form save itself never fails.
         parent::instance_config_save($data, $nolongerused);
@@ -109,14 +113,12 @@ class block_vektra extends block_base {
 
         $payload = [];
 
-        $grounding = $data->grounding_mode ?? 'inherit';
         if ($grounding === 'inherit') {
             $payload['grounding_mode'] = null;
         } else if (in_array($grounding, ['strict', 'hybrid'], true)) {
             $payload['grounding_mode'] = $grounding;
         }
 
-        $showsources = $data->show_sources_choice ?? 'inherit';
         if ($showsources === 'inherit') {
             $payload['show_sources'] = null;
         } else if ($showsources === 'yes') {
