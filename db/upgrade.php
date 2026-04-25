@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for block_vektra.
+ * Upgrade steps for block_vektra.
  *
  * @package    block_vektra
  * @copyright  2026 VektraLabs
@@ -24,9 +24,22 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'block_vektra';
-$plugin->version   = 2026042500;
-$plugin->requires  = 2025100600; // Moodle 5.1.
-$plugin->supported = [501, 501];
-$plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.4.0';
+/**
+ * Execute block_vektra upgrade steps from the given old version.
+ *
+ * @param int $oldversion
+ * @return bool
+ */
+function xmldb_block_vektra_upgrade($oldversion) {
+    if ($oldversion < 2026042500) {
+        // Seed the new admin default for show_sources so existing installs have a
+        // sensible value before the settings page is visited.
+        if (get_config('block_vektra', 'default_show_sources') === false) {
+            set_config('default_show_sources', 1, 'block_vektra');
+        }
+
+        upgrade_block_savepoint(true, 2026042500, 'vektra');
+    }
+
+    return true;
+}

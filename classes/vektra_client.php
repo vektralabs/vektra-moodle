@@ -119,4 +119,125 @@ class vektra_client {
             'expires_at' => $expiresat,
         ];
     }
+
+    /**
+     * Fetch the namespace configuration (raw + resolved) from the Vektra API.
+     *
+     * Calls GET /api/v1/admin/namespaces/{namespace}/config.
+     * Returns ['config' => [...], 'resolved' => [...]] on success, null on any failure.
+     * Failures are logged via debugging() but never thrown.
+     *
+     * @param string $namespace Namespace identifier.
+     * @param int $timeout Total cURL timeout in seconds (default 5; pass 2 from form context).
+     * @return array{config: array, resolved: array}|null
+     */
+    public function get_namespace_config(string $namespace, int $timeout = 5): ?array {
+        if ($namespace === '') {
+            return null;
+        }
+
+        $url = $this->apiurl . '/api/v1/admin/namespaces/' . rawurlencode($namespace) . '/config';
+
+        $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_TIMEOUT'        => $timeout,
+            'CURLOPT_CONNECTTIMEOUT' => min($timeout, 3),
+        ]);
+        $curl->setHeader([
+            'Accept: application/json',
+            'Authorization: Bearer ' . $this->apikey,
+        ]);
+
+        $response = $curl->get($url);
+        $httpcode = $curl->get_info()['http_code'] ?? 0;
+
+        if ($httpcode !== 200) {
+            debugging(
+                "Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}",
+                DEBUG_DEVELOPER
+            );
+            return null;
+        }
+
+        $data = json_decode($response, true);
+        if (!is_array($data) || !isset($data['config']) || !isset($data['resolved'])) {
+            debugging(
+                'Vektra namespace config response missing expected fields: ' . $response,
+                DEBUG_DEVELOPER
+            );
+            return null;
+        }
+
+        return [
+            'config'   => is_array($data['config']) ? $data['config'] : [],
+            'resolved' => is_array($data['resolved']) ? $data['resolved'] : [],
+        ];
+    }
+
+    /**
+     * Patch the namespace configuration on the Vektra API.
+     *
+     * Calls PATCH /api/v1/admin/namespaces/{namespace}/config with the whitelisted
+     * payload (grounding_mode, show_sources). On HTTP 2xx returns ['ok' => true].
+     * On any failure returns ['ok' => false, 'error_code' => string|null, 'message' => string].
+     * Never throws.
+     *
+     * @param string $namespace Namespace identifier.
+     * @param array $payload Whitelisted config keys (grounding_mode, show_sources).
+     * @return array{ok: bool, error_code?: string|null, message?: string}
+     */
+    public function patch_namespace_config(string $namespace, array $payload): array {
+        if ($namespace === '') {
+            return ['ok' => false, 'error_code' => null, 'message' => 'empty namespace'];
+        }
+
+        $url = $this->apiurl . '/api/v1/admin/namespaces/' . rawurlencode($namespace) . '/config';
+        $body = json_encode($payload);
+
+        $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_TIMEOUT'        => 5,
+            'CURLOPT_CONNECTTIMEOUT' => 3,
+            'CURLOPT_CUSTOMREQUEST'  => 'PATCH',
+        ]);
+        $curl->setHeader([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $this->apikey,
+        ]);
+
+        // Moodle's curl wrapper does not have a dedicated patch() helper; post() with
+        // CUSTOMREQUEST=PATCH performs the correct verb.
+        $response = $curl->post($url, $body);
+        $httpcode = $curl->get_info()['http_code'] ?? 0;
+
+        if ($httpcode >= 200 && $httpcode < 300) {
+            return ['ok' => true];
+        }
+
+        $errorcode = null;
+        $message   = "HTTP {$httpcode}";
+        $data = json_decode($response, true);
+        if (is_array($data)) {
+            if (!empty($data['error_code'])) {
+                $errorcode = (string) $data['error_code'];
+            }
+            if (!empty($data['detail'])) {
+                $message = is_string($data['detail']) ? $data['detail'] : json_encode($data['detail']);
+            } else if (!empty($data['message'])) {
+                $message = (string) $data['message'];
+            }
+        }
+
+        debugging(
+            "Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}",
+            DEBUG_DEVELOPER
+        );
+
+        return [
+            'ok'         => false,
+            'error_code' => $errorcode,
+            'message'    => $message,
+        ];
+    }
 }
