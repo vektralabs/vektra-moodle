@@ -47,6 +47,22 @@ $string['settings_theme_desc'] = 'Tema colore predefinito per il widget chatbot.
 $string['theme_light'] = 'Chiaro';
 $string['theme_dark'] = 'Scuro';
 
+// Branding (globale al plugin; nessun override per corso).
+$string['settings_branding'] = 'Branding';
+$string['settings_branding_desc'] = 'Aspetto visivo applicato al widget chatbot in tutti i corsi.';
+$string['settings_primary_color'] = 'Colore primario';
+$string['settings_primary_color_desc'] = 'Colore primario usato dal widget (es. #3366cc). Lascia vuoto per il valore predefinito del widget.';
+$string['settings_logo_url'] = 'URL logo widget';
+$string['settings_logo_url_desc'] = 'URL di un\'immagine icona mostrata nell\'intestazione del widget. Lascia vuoto per il valore predefinito.';
+
+// Attribution (globale al plugin; visibile per impostazione predefinita).
+$string['settings_attribution'] = 'Attribuzione';
+$string['settings_attribution_desc'] = 'Attribuzione "powered by" mostrata nel widget.';
+$string['settings_powered_by_text'] = 'Testo attribuzione';
+$string['settings_powered_by_text_desc'] = 'Testo "powered by" personalizzato mostrato nel widget. Lascia vuoto per mantenere il valore predefinito.';
+$string['settings_powered_by_url'] = 'Link attribuzione';
+$string['settings_powered_by_url_desc'] = 'URL opzionale a cui collegare il testo di attribuzione.';
+
 // Instance settings.
 $string['config_title'] = 'Titolo blocco';
 $string['config_course_id'] = 'ID corso Vektra';
@@ -56,7 +72,35 @@ $string['config_namespace_help'] = 'Sovrascrivere il namespace incluso nel token
 $string['config_theme'] = 'Tema';
 $string['config_language'] = 'Lingua';
 $string['config_language_help'] = 'Sovrascrivere la lingua del widget (es. "en", "it"). Lascia vuoto per usare la lingua corrente di Moodle.';
+$string['config_welcome_message'] = 'Messaggio di benvenuto';
+$string['config_welcome_message_help'] = 'Saluto opzionale mostrato all\'apertura della chat. Lascia vuoto per il valore predefinito del widget.';
 $string['usedefault'] = 'Usa predefinito';
+
+// Impostazioni comportamentali per istanza (salvate sul backend Vektra, non in configdata).
+$string['config_behavioral_header'] = 'Comportamento (Vektra)';
+$string['config_inherit'] = 'Eredita';
+$string['config_grounding_mode'] = 'Modalità grounding';
+$string['config_grounding_mode_help'] = 'Quanto rigorosamente l\'assistente deve restare entro i materiali del corso. "Eredita" usa il valore predefinito del namespace.';
+$string['config_grounding_strict'] = 'Stretto';
+$string['config_grounding_hybrid'] = 'Ibrido';
+$string['config_show_sources_choice'] = 'Mostra fonti';
+$string['config_show_sources_choice_help'] = 'Indica se il widget mostra le citazioni delle fonti sotto le risposte. "Eredita" usa il valore predefinito del namespace.';
+$string['config_show_sources_yes'] = 'Sì';
+$string['config_show_sources_no'] = 'No';
+$string['config_effective_label'] = 'Effettivo: {$a->value} ({$a->status})';
+$string['config_status_default'] = 'predefinito';
+$string['config_status_override'] = 'override';
+$string['config_value_unknown'] = 'sconosciuto';
+$string['config_namespace_unavailable'] = 'Impossibile caricare la configurazione Vektra corrente. I valori salvati saranno comunque applicati.';
+
+// Avvisi di salvataggio (PATCH best-effort).
+$string['save_warning_not_configured'] = 'API Vektra non configurata; le impostazioni comportamentali non sono state inviate al backend.';
+$string['save_warning_no_namespace'] = 'Impossibile risolvere il namespace; le impostazioni comportamentali non sono state inviate al backend.';
+$string['save_warning_patch_failed'] = 'Impossibile salvare le impostazioni comportamentali su Vektra: {$a->message} ({$a->code})';
+$string['save_info_behavioral_skipped'] = 'Vektra non era raggiungibile all\'apertura del form: le impostazioni comportamentali non sono state inviate al backend. Riapri il form per modificarle.';
+
+// Titolo predefinito del blocco (usato quando non è impostato un override).
+$string['default_title'] = 'Assistente di {$a}';
 
 // Errors.
 $string['invalidblockinstance'] = 'Istanza del blocco non valida per questo corso.';

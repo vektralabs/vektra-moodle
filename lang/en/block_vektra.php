@@ -47,6 +47,22 @@ $string['settings_theme_desc'] = 'Default color theme for the chatbot widget.';
 $string['theme_light'] = 'Light';
 $string['theme_dark'] = 'Dark';
 
+// Branding (plugin-global; no per-course override).
+$string['settings_branding'] = 'Branding';
+$string['settings_branding_desc'] = 'Visual brand applied to the chatbot widget across all courses.';
+$string['settings_primary_color'] = 'Primary color';
+$string['settings_primary_color_desc'] = 'Primary color used by the widget (e.g., #3366cc). Leave empty for the widget default.';
+$string['settings_logo_url'] = 'Widget logo URL';
+$string['settings_logo_url_desc'] = 'URL of an icon image displayed in the widget header. Leave empty for the widget default.';
+
+// Attribution (plugin-global; visible by default).
+$string['settings_attribution'] = 'Attribution';
+$string['settings_attribution_desc'] = 'Powered-by attribution shown in the widget.';
+$string['settings_powered_by_text'] = 'Attribution text';
+$string['settings_powered_by_text_desc'] = 'Custom "powered by" text shown in the widget. Leave empty to keep the default.';
+$string['settings_powered_by_url'] = 'Attribution link';
+$string['settings_powered_by_url_desc'] = 'Optional URL the attribution text links to.';
+
 // Instance settings.
 $string['config_title'] = 'Block title';
 $string['config_course_id'] = 'Vektra course ID';
@@ -56,7 +72,35 @@ $string['config_namespace_help'] = 'Override the namespace included in the JWT t
 $string['config_theme'] = 'Theme';
 $string['config_language'] = 'Language';
 $string['config_language_help'] = 'Override the widget language (e.g., "en", "it"). Leave empty to use the current Moodle language.';
+$string['config_welcome_message'] = 'Welcome message';
+$string['config_welcome_message_help'] = 'Optional greeting shown when the chat opens. Leave empty for the widget default.';
 $string['usedefault'] = 'Use default';
+
+// Behavioral instance settings (saved to Vektra backend, not Moodle configdata).
+$string['config_behavioral_header'] = 'Behavior (Vektra)';
+$string['config_inherit'] = 'Inherit';
+$string['config_grounding_mode'] = 'Grounding mode';
+$string['config_grounding_mode_help'] = 'How strictly the assistant must stay within course materials. "Inherit" uses the namespace default.';
+$string['config_grounding_strict'] = 'Strict';
+$string['config_grounding_hybrid'] = 'Hybrid';
+$string['config_show_sources_choice'] = 'Show sources';
+$string['config_show_sources_choice_help'] = 'Whether the widget shows source citations beneath answers. "Inherit" uses the namespace default.';
+$string['config_show_sources_yes'] = 'Yes';
+$string['config_show_sources_no'] = 'No';
+$string['config_effective_label'] = 'Effective: {$a->value} ({$a->status})';
+$string['config_status_default'] = 'default';
+$string['config_status_override'] = 'override';
+$string['config_value_unknown'] = 'unknown';
+$string['config_namespace_unavailable'] = 'Could not load the current Vektra configuration. Saved values will still be applied.';
+
+// Save warnings (best-effort PATCH).
+$string['save_warning_not_configured'] = 'Vektra API is not configured; behavioral settings could not be sent to the backend.';
+$string['save_warning_no_namespace'] = 'Could not resolve the namespace; behavioral settings could not be sent to the backend.';
+$string['save_warning_patch_failed'] = 'Could not save behavioral settings to Vektra: {$a->message} ({$a->code})';
+$string['save_info_behavioral_skipped'] = 'Vektra was unreachable when this form was opened, so behavioral settings were not sent to the backend. Reopen the form to make changes.';
+
+// Default block title (used when no instance override is set).
+$string['default_title'] = 'Assistant for {$a}';
 
 // Errors.
 $string['invalidblockinstance'] = 'Invalid block instance for this course.';

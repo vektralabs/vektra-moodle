@@ -62,4 +62,4 @@ Moodle block plugin that integrates the Vektra RAG chatbot into course pages. Pa
 - None identified yet
 
 ---
-*Last updated: 2026-03-17*
+*Last updated: 2026-04-25*

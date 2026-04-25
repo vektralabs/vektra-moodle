@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Vektra API client for token generation.
+ * Vektra API client.
  *
  * @package    block_vektra
  * @copyright  2026 VektraLabs
@@ -25,10 +25,14 @@
 namespace block_vektra;
 
 /**
- * HTTP client for the Vektra Learn API.
+ * HTTP client for the Vektra Learn and admin APIs.
  *
- * Handles JWT token generation for the chatbot widget.
- * Uses Moodle's curl wrapper for HTTP requests.
+ * Wraps the calls used by the Moodle plugin: JWT token generation for the
+ * widget, plus GET/PATCH on the namespace configuration endpoint that backs
+ * the per-course behavioral settings.
+ *
+ * Uses Moodle's curl wrapper for HTTP requests; all methods return values
+ * (or null) instead of throwing, so callers can degrade gracefully.
  */
 class vektra_client {
     /** @var int Fallback token expiry in seconds when the server does not provide one. */
@@ -118,5 +122,163 @@ class vektra_client {
             'token'      => $data['token'],
             'expires_at' => $expiresat,
         ];
+    }
+
+    /**
+     * Fetch the namespace configuration (raw + resolved) from the Vektra API.
+     *
+     * Calls GET /api/v1/admin/namespaces/{namespace}/config.
+     * Returns ['config' => [...], 'resolved' => [...]] on success, null on any failure.
+     * Failures are logged via debugging() but never thrown.
+     *
+     * @param string $namespace Namespace identifier.
+     * @param int $timeout Total cURL timeout in seconds (default 5; pass 2 from form context).
+     * @return array{config: array, resolved: array}|null
+     */
+    public function get_namespace_config(string $namespace, int $timeout = 5): ?array {
+        if ($namespace === '') {
+            return null;
+        }
+
+        $url = $this->apiurl . '/api/v1/admin/namespaces/' . rawurlencode($namespace) . '/config';
+
+        $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_TIMEOUT'        => $timeout,
+            'CURLOPT_CONNECTTIMEOUT' => min($timeout, 3),
+        ]);
+        $curl->setHeader([
+            'Accept: application/json',
+            'Authorization: Bearer ' . $this->apikey,
+        ]);
+
+        $response = $curl->get($url);
+        $httpcode = $curl->get_info()['http_code'] ?? 0;
+
+        if ($httpcode !== 200) {
+            debugging(
+                "Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}",
+                DEBUG_DEVELOPER
+            );
+            return null;
+        }
+
+        $data = json_decode($response, true);
+        if (!is_array($data) || !isset($data['config']) || !isset($data['resolved'])) {
+            debugging(
+                'Vektra namespace config response missing expected fields: ' . $response,
+                DEBUG_DEVELOPER
+            );
+            return null;
+        }
+
+        return [
+            'config'   => is_array($data['config']) ? $data['config'] : [],
+            'resolved' => is_array($data['resolved']) ? $data['resolved'] : [],
+        ];
+    }
+
+    /**
+     * Patch the namespace configuration on the Vektra API.
+     *
+     * Calls PATCH /api/v1/admin/namespaces/{namespace}/config with the whitelisted
+     * payload (grounding_mode, show_sources). On HTTP 2xx returns ['ok' => true].
+     * On any failure returns ['ok' => false, 'error_code' => string|null, 'message' => string].
+     * Never throws.
+     *
+     * @param string $namespace Namespace identifier.
+     * @param array $payload Whitelisted config keys (grounding_mode, show_sources).
+     * @return array{ok: bool, error_code?: string|null, message?: string}
+     */
+    public function patch_namespace_config(string $namespace, array $payload): array {
+        if ($namespace === '') {
+            return ['ok' => false, 'error_code' => null, 'message' => 'empty namespace'];
+        }
+
+        $url = $this->apiurl . '/api/v1/admin/namespaces/' . rawurlencode($namespace) . '/config';
+        $body = json_encode($payload);
+
+        $curl = new \curl();
+        $curl->setopt([
+            'CURLOPT_TIMEOUT'        => 5,
+            'CURLOPT_CONNECTTIMEOUT' => 3,
+        ]);
+        $curl->setHeader([
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'Authorization: Bearer ' . $this->apikey,
+        ]);
+
+        $response = $curl->patch($url, $body);
+        $httpcode = $curl->get_info()['http_code'] ?? 0;
+
+        if ($httpcode >= 200 && $httpcode < 300) {
+            return ['ok' => true];
+        }
+
+        [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
+
+        debugging(
+            "Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}",
+            DEBUG_DEVELOPER
+        );
+
+        return [
+            'ok'         => false,
+            'error_code' => $errorcode,
+            'message'    => $message,
+        ];
+    }
+
+    /**
+     * Extract a (code, message) pair from a Vektra error response body.
+     *
+     * The platform wraps errors as `{"detail": {"error": {"code": ..., "message": ...}}}`.
+     * FastAPI validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
+     * plain handlers still emit `{"detail": "<string>"}`. This helper covers all three
+     * shapes and falls back to `HTTP <code>` when nothing parseable is found.
+     *
+     * @return array{0: string|null, 1: string} [error_code, human-readable message]
+     */
+    private function parse_error_envelope(string $response, int $httpcode): array {
+        $errorcode = null;
+        $message   = "HTTP {$httpcode}";
+
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            return [$errorcode, $message];
+        }
+
+        $detail = $data['detail'] ?? null;
+
+        if (is_array($detail) && isset($detail['error']) && is_array($detail['error'])) {
+            // Standard Vektra structured envelope.
+            $err = $detail['error'];
+            if (!empty($err['code'])) {
+                $errorcode = (string) $err['code'];
+            }
+            if (!empty($err['message'])) {
+                $message = (string) $err['message'];
+            }
+            return [$errorcode, $message];
+        }
+
+        if (is_string($detail) && $detail !== '') {
+            $message = $detail;
+            return [$errorcode, $message];
+        }
+
+        if (is_array($detail)) {
+            // FastAPI validation error: list of {msg, loc, type}.
+            $first = reset($detail);
+            if (is_array($first) && !empty($first['msg'])) {
+                $message = (string) $first['msg'];
+                return [$errorcode, $message];
+            }
+            // Unknown nested shape — surface compactly.
+            $message = json_encode($detail);
+        }
+
+        return [$errorcode, $message];
     }
 }
