@@ -118,18 +118,4 @@ if ($ADMIN->fulltree) {
         '',
         PARAM_URL
     ));
-
-    // Behavioral defaults (apply when a course-instance leaves the field on "inherit").
-    $settings->add(new admin_setting_heading(
-        'block_vektra/behavior_defaults',
-        get_string('settings_behavior_defaults', 'block_vektra'),
-        get_string('settings_behavior_defaults_desc', 'block_vektra')
-    ));
-
-    $settings->add(new admin_setting_configcheckbox(
-        'block_vektra/default_show_sources',
-        get_string('settings_default_show_sources', 'block_vektra'),
-        get_string('settings_default_show_sources_desc', 'block_vektra'),
-        1
-    ));
 }

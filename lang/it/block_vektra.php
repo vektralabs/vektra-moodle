@@ -63,12 +63,6 @@ $string['settings_powered_by_text_desc'] = 'Testo "powered by" personalizzato mo
 $string['settings_powered_by_url'] = 'Link attribuzione';
 $string['settings_powered_by_url_desc'] = 'URL opzionale a cui collegare il testo di attribuzione.';
 
-// Predefiniti comportamentali (applicati quando un campo per corso resta su "Eredita").
-$string['settings_behavior_defaults'] = 'Predefiniti comportamentali';
-$string['settings_behavior_defaults_desc'] = 'Valori predefiniti applicati quando un campo comportamentale del corso resta su "Eredita". Gli override per namespace si impostano nella configurazione del blocco.';
-$string['settings_default_show_sources'] = 'Mostra fonti per impostazione predefinita';
-$string['settings_default_show_sources_desc'] = 'Se attivo, il widget mostra le citazioni delle fonti sotto le risposte, salvo override del corso.';
-
 // Instance settings.
 $string['config_title'] = 'Titolo blocco';
 $string['config_course_id'] = 'ID corso Vektra';
@@ -103,6 +97,7 @@ $string['config_namespace_unavailable'] = 'Impossibile caricare la configurazion
 $string['save_warning_not_configured'] = 'API Vektra non configurata; le impostazioni comportamentali non sono state inviate al backend.';
 $string['save_warning_no_namespace'] = 'Impossibile risolvere il namespace; le impostazioni comportamentali non sono state inviate al backend.';
 $string['save_warning_patch_failed'] = 'Impossibile salvare le impostazioni comportamentali su Vektra: {$a->message} ({$a->code})';
+$string['save_info_behavioral_skipped'] = 'Vektra non era raggiungibile all\'apertura del form: le impostazioni comportamentali non sono state inviate al backend. Riapri il form per modificarle.';
 
 // Titolo predefinito del blocco (usato quando non è impostato un override).
 $string['default_title'] = 'Assistente di {$a}';

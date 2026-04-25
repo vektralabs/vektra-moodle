@@ -113,6 +113,13 @@ class block_vektra_edit_form extends block_edit_form {
 
         // Best-effort fetch of the namespace config (2s timeout) for "Effective" labels.
         $nsconfig = $this->fetch_namespace_config();
+        $getok    = ($nsconfig !== null);
+
+        // Hidden marker so instance_config_save knows whether the form-open GET succeeded.
+        // When it didn't, the save handler must skip the PATCH to avoid clobbering the
+        // backend with values the teacher never had a chance to see.
+        $mform->addElement('hidden', 'config_get_ok', $getok ? '1' : '0');
+        $mform->setType('config_get_ok', PARAM_INT);
 
         $mform->addElement(
             'select',
@@ -126,7 +133,7 @@ class block_vektra_edit_form extends block_edit_form {
         );
         $mform->setDefault('config_grounding_mode', 'inherit');
         $mform->addHelpButton('config_grounding_mode', 'config_grounding_mode', 'block_vektra');
-        if ($nsconfig !== null) {
+        if ($getok) {
             $mform->addElement(
                 'static',
                 'config_grounding_mode_effective',
@@ -147,7 +154,7 @@ class block_vektra_edit_form extends block_edit_form {
         );
         $mform->setDefault('config_show_sources_choice', 'inherit');
         $mform->addHelpButton('config_show_sources_choice', 'config_show_sources_choice', 'block_vektra');
-        if ($nsconfig !== null) {
+        if ($getok) {
             $mform->addElement(
                 'static',
                 'config_show_sources_choice_effective',
@@ -156,8 +163,11 @@ class block_vektra_edit_form extends block_edit_form {
             );
         }
 
-        if ($nsconfig === null && $this->namespaceconfigfetched) {
+        if (!$getok && $this->namespaceconfigfetched) {
             // GET attempted but failed (timeout/network/auth/missing config).
+            // Freeze the selects so the teacher cannot mistakenly act on inputs that
+            // would be ignored at save time.
+            $mform->freeze(['config_grounding_mode', 'config_show_sources_choice']);
             $mform->addElement(
                 'static',
                 'config_namespace_unavailable',
@@ -180,6 +190,7 @@ class block_vektra_edit_form extends block_edit_form {
         $defaults = (object) $defaults;
 
         $nsconfig = $this->fetch_namespace_config();
+        $defaults->config_get_ok = ($nsconfig !== null) ? 1 : 0;
         $raw = ($nsconfig['config'] ?? []);
 
         if (isset($raw['grounding_mode']) && in_array($raw['grounding_mode'], ['strict', 'hybrid'], true)) {

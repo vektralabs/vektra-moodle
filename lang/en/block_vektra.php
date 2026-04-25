@@ -63,12 +63,6 @@ $string['settings_powered_by_text_desc'] = 'Custom "powered by" text shown in th
 $string['settings_powered_by_url'] = 'Attribution link';
 $string['settings_powered_by_url_desc'] = 'Optional URL the attribution text links to.';
 
-// Behavioral defaults (apply when a per-course field is left on "inherit").
-$string['settings_behavior_defaults'] = 'Behavioral defaults';
-$string['settings_behavior_defaults_desc'] = 'Defaults applied when a per-course behavioral field is left on "inherit". Per-namespace overrides are set in the block instance configuration.';
-$string['settings_default_show_sources'] = 'Show sources by default';
-$string['settings_default_show_sources_desc'] = 'When enabled, the widget displays source citations beneath answers unless a course overrides this setting.';
-
 // Instance settings.
 $string['config_title'] = 'Block title';
 $string['config_course_id'] = 'Vektra course ID';
@@ -103,6 +97,7 @@ $string['config_namespace_unavailable'] = 'Could not load the current Vektra con
 $string['save_warning_not_configured'] = 'Vektra API is not configured; behavioral settings could not be sent to the backend.';
 $string['save_warning_no_namespace'] = 'Could not resolve the namespace; behavioral settings could not be sent to the backend.';
 $string['save_warning_patch_failed'] = 'Could not save behavioral settings to Vektra: {$a->message} ({$a->code})';
+$string['save_info_behavioral_skipped'] = 'Vektra was unreachable when this form was opened, so behavioral settings were not sent to the backend. Reopen the form to make changes.';
 
 // Default block title (used when no instance override is set).
 $string['default_title'] = 'Assistant for {$a}';

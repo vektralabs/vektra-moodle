@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Vektra API client for token generation.
+ * Vektra API client.
  *
  * @package    block_vektra
  * @copyright  2026 VektraLabs
@@ -25,10 +25,14 @@
 namespace block_vektra;
 
 /**
- * HTTP client for the Vektra Learn API.
+ * HTTP client for the Vektra Learn and admin APIs.
  *
- * Handles JWT token generation for the chatbot widget.
- * Uses Moodle's curl wrapper for HTTP requests.
+ * Wraps the calls used by the Moodle plugin: JWT token generation for the
+ * widget, plus GET/PATCH on the namespace configuration endpoint that backs
+ * the per-course behavioral settings.
+ *
+ * Uses Moodle's curl wrapper for HTTP requests; all methods return values
+ * (or null) instead of throwing, so callers can degrade gracefully.
  */
 class vektra_client {
     /** @var int Fallback token expiry in seconds when the server does not provide one. */
@@ -198,7 +202,6 @@ class vektra_client {
         $curl->setopt([
             'CURLOPT_TIMEOUT'        => 5,
             'CURLOPT_CONNECTTIMEOUT' => 3,
-            'CURLOPT_CUSTOMREQUEST'  => 'PATCH',
         ]);
         $curl->setHeader([
             'Content-Type: application/json',
@@ -206,28 +209,14 @@ class vektra_client {
             'Authorization: Bearer ' . $this->apikey,
         ]);
 
-        // Moodle's curl wrapper does not have a dedicated patch() helper; post() with
-        // CUSTOMREQUEST=PATCH performs the correct verb.
-        $response = $curl->post($url, $body);
+        $response = $curl->patch($url, $body);
         $httpcode = $curl->get_info()['http_code'] ?? 0;
 
         if ($httpcode >= 200 && $httpcode < 300) {
             return ['ok' => true];
         }
 
-        $errorcode = null;
-        $message   = "HTTP {$httpcode}";
-        $data = json_decode($response, true);
-        if (is_array($data)) {
-            if (!empty($data['error_code'])) {
-                $errorcode = (string) $data['error_code'];
-            }
-            if (!empty($data['detail'])) {
-                $message = is_string($data['detail']) ? $data['detail'] : json_encode($data['detail']);
-            } else if (!empty($data['message'])) {
-                $message = (string) $data['message'];
-            }
-        }
+        [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
 
         debugging(
             "Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}",
@@ -239,5 +228,57 @@ class vektra_client {
             'error_code' => $errorcode,
             'message'    => $message,
         ];
+    }
+
+    /**
+     * Extract a (code, message) pair from a Vektra error response body.
+     *
+     * The platform wraps errors as `{"detail": {"error": {"code": ..., "message": ...}}}`.
+     * FastAPI validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
+     * plain handlers still emit `{"detail": "<string>"}`. This helper covers all three
+     * shapes and falls back to `HTTP <code>` when nothing parseable is found.
+     *
+     * @return array{0: string|null, 1: string} [error_code, human-readable message]
+     */
+    private function parse_error_envelope(string $response, int $httpcode): array {
+        $errorcode = null;
+        $message   = "HTTP {$httpcode}";
+
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            return [$errorcode, $message];
+        }
+
+        $detail = $data['detail'] ?? null;
+
+        if (is_array($detail) && isset($detail['error']) && is_array($detail['error'])) {
+            // Standard Vektra structured envelope.
+            $err = $detail['error'];
+            if (!empty($err['code'])) {
+                $errorcode = (string) $err['code'];
+            }
+            if (!empty($err['message'])) {
+                $message = (string) $err['message'];
+            }
+            return [$errorcode, $message];
+        }
+
+        if (is_string($detail) && $detail !== '') {
+            $message = $detail;
+            return [$errorcode, $message];
+        }
+
+        if (is_array($detail)) {
+            // FastAPI validation error: list of {msg, loc, type}.
+            $first = reset($detail);
+            if (is_array($first) && !empty($first['msg'])) {
+                $message = (string) $first['msg'];
+                return [$errorcode, $message];
+            }
+            // Unknown nested shape — surface compactly.
+            $message = json_encode($detail);
+        }
+
+        return [$errorcode, $message];
     }
 }

@@ -89,8 +89,23 @@ class block_vektra extends block_base {
      * @param bool $nolongerused Unused parameter kept for parent signature compatibility.
      */
     public function instance_config_save($data, $nolongerused = false) {
+        // Capture the form-open marker, then strip it so it does not pollute configdata.
+        $getok = (int) ($data->get_ok ?? 0);
+        unset($data->get_ok);
+
         // Always persist configdata first so the form save itself never fails.
         parent::instance_config_save($data, $nolongerused);
+
+        // If the form-open GET did not succeed, the teacher could not see the real
+        // backend state, so the values they submitted for the behavioral selects are
+        // not trustworthy. Skip the PATCH entirely to avoid silently clobbering
+        // existing namespace overrides.
+        if ($getok !== 1) {
+            \core\notification::info(
+                get_string('save_info_behavioral_skipped', 'block_vektra')
+            );
+            return;
+        }
 
         $payload = [];
 
