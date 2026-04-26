@@ -2,7 +2,7 @@
 
 Thanks for taking the time to contribute. This document captures the
 conventions specific to this repo. For project-wide context (architecture,
-how the plugin fits into the Vektra platform), see [README.md](README.md).
+how the plugin fits into the Vektra RAG platform), see [README.md](README.md).
 
 ## Branch flow
 
@@ -91,7 +91,7 @@ docker exec vektra-moodle php /var/www/html/admin/cli/purge_caches.php
 
 ## Reporting issues
 
-Open a GitHub issue with: Moodle version, PHP version, Vektra-stack version,
+Open a GitHub issue with: Moodle version, PHP version, Vektra RAG version,
 steps to reproduce, expected vs. actual behaviour. Logs from
 `docker logs vektra-moodle` and the browser console (if widget-related)
 help a lot.

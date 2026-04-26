@@ -1,13 +1,13 @@
-# Vektra AI Assistant - Moodle Block Plugin
+# Vektra RAG for Moodle
 
-Moodle block plugin that integrates the [Vektra](https://github.com/vektralabs/vektra-stack) RAG chatbot into course pages. Students get an AI assistant that answers questions based on their course materials.
+AI course assistant for Moodle. Brings the [Vektra RAG](https://github.com/vektralabs/vektra-stack) chatbot into any course as a block: students get answers grounded in their own course materials, with per-course controls for grounding mode and source citations.
 
 ## Requirements
 
 - Moodle 5.1+
 - PHP 8.2+
-- A running Vektra instance with the Learn module enabled
-- Vektra v0.5.0+ to use the per-course **Behavior** settings (grounding mode, source visibility). Earlier versions remain compatible: the form will gracefully degrade and skip the backend sync.
+- A running Vektra RAG instance with the Learn module enabled
+- Vektra RAG v0.5.0+ to use the per-course **Behavior** settings (grounding mode, source visibility). Earlier versions remain compatible: the form will gracefully degrade and skip the backend sync.
 
 ## Installation
 
@@ -46,7 +46,7 @@ Branding and attribution are intentionally site-wide (no per-course override) to
    | Theme / Language | Override the site-wide defaults for this course. |
    | Welcome message | Optional greeting shown when the chat opens. |
 
-   **Behavior (Vektra)** — requires Vektra v0.5.0+
+   **Behavior (Vektra)** — requires Vektra RAG v0.5.0+
 
    | Field | Options |
    |-------|---------|
@@ -73,8 +73,8 @@ Branding and attribution are intentionally site-wide (no per-course override) to
 
 ## Optional components
 
-- [`docker/`](docker/README.md) — local Moodle 5.1 dev environment for testing the plugin against vektra-stack on the same host.
-- [`n8n/`](n8n/README.md) — n8n workflow that polls Moodle Web Services and syncs course materials into Vektra automatically (PDF, DOCX, PPTX, Markdown).
+- [`docker/`](docker/README.md) — local Moodle 5.1 dev environment for testing the plugin against Vektra RAG on the same host.
+- [`n8n/`](n8n/README.md) — n8n workflow that polls Moodle Web Services and syncs course materials into Vektra RAG automatically (PDF, DOCX, PPTX, Markdown).
 
 ## Languages
 
