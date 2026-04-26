@@ -19,7 +19,7 @@ Convention (Keep a Changelog 1.1.0):
 
 <!-- Add entries under: Added, Changed, Deprecated, Removed, Fixed, Security -->
 
-## [0.5.0] - 2026-04-25
+## [0.5.0] - 2026-04-26
 
 Instructor configuration UI and white-label site settings. Aligns the plugin
 release tag with [vektra-stack v0.5.0](https://github.com/vektralabs/vektra-stack)
