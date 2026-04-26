@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-03-17
+**Updated**: 2026-04-26
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -58,6 +58,52 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 - [ ] `data-token-refresh-url` added to widget script tag
 - [ ] Token refresh transparent to user (no reload)
 - [ ] Refresh error handled by widget (localized message)
+
+### BUG-001: Namespace mismatch between n8n ingestion and plugin
+
+**Status**: planned | **Priority**: high | **Created**: 2026-04-26
+**Origin**: Gemini review on PR #15 (release v0.5.0), comment 3143946475
+
+**Context**: The n8n ingestion workflow (`n8n/workflows/moodle-ingest.json`) maps Moodle course shortname to Vektra namespace by **slugifying** it (lowercase + replace spaces with dashes), while the plugin uses the **raw shortname** as the fallback in the namespace resolution chain. Result: any course whose shortname contains spaces or uppercase letters silently fails — the widget queries the raw-name namespace while documents were ingested into the slugified one.
+
+Example: shortname `"Course 101"` → ingest writes to `course-101`, widget queries `Course 101` → empty results.
+
+**Proposed approach** (decide before fix):
+- Option A (recommended): plugin slugifies shortname to match n8n behavior. Lowest risk, no migration; preserves existing ingestions.
+- Option B: n8n stops slugifying. Breaks existing ingestions; requires re-ingest.
+- Option C: document the constraint and require teachers to set explicit `course_id` override on the block when shortname is non-slug-safe.
+
+**Acceptance criteria**:
+- [ ] Plugin and n8n agree on the same namespace derivation algorithm
+- [ ] Documentation (README per-course setup) flags the convention
+- [ ] Existing ingested courses continue to work without re-ingestion
+
+### BUG-002: `!empty()` resolution treats `'0'` as empty in namespace/course_id chain
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-04-26
+**Origin**: Gemini review on PR #15, comments 3143946476 + 3143946478
+
+**Context**: `block_vektra::instance_config_save` and `block_vektra::get_content` use `!empty($data->namespace)` / `!empty($data->course_id)` to resolve the effective values. Since these fields are typed `PARAM_ALPHANUMEXT`, the literal string `'0'` is a valid value but `!empty('0')` returns `false`, causing an unintended fallback to the next level in the chain. The namespace lookup in `get_content` already uses the correct `is_string($ns) && $ns !== ''` pattern; only the other sites need to be aligned.
+
+**Affected lines**:
+- `block_vektra.php:148-154` (instance_config_save namespace chain)
+- `block_vektra.php:213-214` (get_content course_id resolution)
+- `edit_form.php:251-260` (resolve_namespace — same pattern)
+
+**Acceptance criteria**:
+- [ ] All three namespace/course_id resolution sites use `is_string($x) && $x !== ''` (matching the pattern already used in `get_content` for `namespace`)
+- [ ] Manual test: setting `course_id` to `'0'` resolves to `'0'`, not to shortname
+
+### BUG-003: Missing maxlength validation on welcome_message form field
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-26
+**Origin**: Gemini review on PR #15, comment 3143946480 — gap from plan Phase C5
+
+**Context**: The implementation plan (Phase C5) called for `config_welcome_message` to enforce `maxlength=500` via `addRule` (client-side message + server-side reject). The current implementation only declares `PARAM_TEXT`, which protects DB storage but allows arbitrarily long input through the form with no UX feedback. No security or overflow risk in `mdl_block_instances.configdata`; this is a UX/validation gap.
+
+**Acceptance criteria**:
+- [ ] `addRule('config_welcome_message', maximumchars(500), 'maxlength', 500)` in `edit_form.php::specific_definition`
+- [ ] Optional: `validation()` method to trim + reject > 500 server-side
 
 ---
 
