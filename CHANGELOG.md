@@ -55,11 +55,12 @@ source citation visibility).
 - **User-facing branding**: README and external-facing docs now use
   "Vektra RAG for Moodle" to align with the parent product
   ([vektra-stack](https://github.com/vektralabs/vektra-stack)) rebrand
-  to **Vektra RAG**. In-product labels (the `pluginname`
-  "Vektra AI Assistant" shown in Moodle UI, the per-course default
-  block title "Assistant for {course}", and admin setting field labels)
-  are unchanged. Repo name, PHP class names, and code identifiers are
-  unchanged.
+  to **Vektra RAG** (coordinated with
+  [vektralabs/vektra-stack#70](https://github.com/vektralabs/vektra-stack/pull/70)).
+  In-product labels (the `pluginname` "Vektra AI Assistant" shown in
+  Moodle UI, the per-course default block title "Assistant for {course}",
+  and admin setting field labels) are unchanged. Repo name, PHP class
+  names, and code identifiers are unchanged.
 - **Render path**: `block_vektra::get_content` now reads the course from
   `$this->page->course` instead of the `$COURSE` global, matching Moodle
   block-context guidance.
