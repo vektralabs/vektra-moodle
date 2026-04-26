@@ -19,7 +19,7 @@ Moodle block plugin that integrates the [Vektra](https://github.com/vektralabs/v
 
 | Setting | Description |
 |---------|-------------|
-| **Vektra API URL** | Base URL of your Vektra instance (server-side, e.g. `https://vektra.example.com` or a Docker hostname). |
+| **Vektra API URL** | Base URL of your Vektra instance (server-side, e.g. `https://vektra.example.com` or a Docker hostname). Do not include a trailing slash. |
 | **Public URL (browser)** | Browser-accessible URL for the widget JS and API calls. Leave empty if the API URL is already browser-accessible. Useful when the server-side URL is a Docker-internal hostname. |
 | **API Key** | Vektra API key with `admin` scope (required for token generation and namespace config). |
 | **Default theme** | Widget color theme (`light` or `dark`). Per-course override available. |
@@ -62,7 +62,7 @@ Branding and attribution are intentionally site-wide (no per-course override) to
 3. The block injects the Vektra chatbot widget (`vektra-chat.js`) into the page footer
 4. The widget appears as a floating chat button in the bottom-right corner
 5. All RAG queries are scoped to the student's course materials
-6. Source citation visibility and grounding behaviour resolve server-side from the namespace config (set per-course in the form above)
+6. Source citation visibility and grounding behavior resolve server-side from the namespace config (set per-course in the form above)
 
 ## Capabilities
 
