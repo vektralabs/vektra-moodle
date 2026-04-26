@@ -91,7 +91,7 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - `edit_form.php:251-260` (resolve_namespace — same pattern)
 
 **Acceptance criteria**:
-- [ ] All three namespace/course_id resolution sites use `isset(...) && (string)$x !== ''`
+- [ ] All three namespace/course_id resolution sites use `is_string($x) && $x !== ''` (matching the pattern already used in `get_content` for `namespace`)
 - [ ] Manual test: setting `course_id` to `'0'` resolves to `'0'`, not to shortname
 
 ### BUG-003: Missing maxlength validation on welcome_message form field
