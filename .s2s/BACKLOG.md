@@ -199,6 +199,19 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 - [ ] Either: explicit warning that `admin` grants full admin (with rotation/storage hygiene callout)
 - [ ] Or (preferred if backend supports it): split into two keys (ingest-only + narrower delete-capable)
 
+### BUG-011: n8n `JSON.parse` on ingest response fails on non-JSON body
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-04-27
+**Origin**: Gemini review round-4, comment 3147254494
+
+**Context**: `Process Single File` does `const body = JSON.parse(ingestResp.body.toString())` immediately after the `/api/v1/ingest` HTTP call, with no error handling. If Vektra returns a non-JSON response (502 proxy error, 504 gateway timeout, HTML error page), `JSON.parse` throws `SyntaxError: Unexpected token < in JSON at position 0`. The exception is caught by the outer `try/catch` which marks the file as `status: 'failed'` with the raw exception message — no HTTP status code, no response preview. Operators cannot distinguish a Vektra outage from a corrupt document without manually correlating timestamps with proxy logs.
+
+**Acceptance criteria**:
+- [ ] Wrap `JSON.parse(ingestResp.body.toString())` in try-catch inside `Process Single File`
+- [ ] On parse failure, return a structured failed item with HTTP status code and first 200 chars of response body
+- [ ] Error message format: `Vektra returned non-JSON (HTTP <code>): <preview>`
+- [ ] File is marked `status: 'failed'` with `document_id: null`
+
 ### TECH-001: Code-quality and documentation polish (CodeRabbit nitpicks)
 
 **Status**: planned | **Priority**: low | **Created**: 2026-04-26
