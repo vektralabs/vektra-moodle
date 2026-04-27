@@ -17,14 +17,16 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
-<!-- Add entries under: Added, Changed, Deprecated, Removed, Fixed, Security -->
-
-## [0.5.0] - 2026-04-26
-
 Instructor configuration UI and white-label site settings. Aligns the plugin
 release tag with [vektra-stack v0.5.0](https://github.com/vektralabs/vektra-stack)
 since the two ship together for FEAT-014 (per-course grounding mode and
 source citation visibility).
+
+> **Note**: this section was previously dated `[0.5.0] - 2026-04-26`, but the
+> release was held to roll in the bug fixes tracked as BUG-001 through BUG-010
+> and TECH-001 in `.s2s/BACKLOG.md` (raised by gemini-code-assist and
+> CodeRabbit on the release PR #15). Once those land, this block will be
+> renamed back to `[X.Y.Z] - YYYY-MM-DD` with the actual release date.
 
 ### Added
 
