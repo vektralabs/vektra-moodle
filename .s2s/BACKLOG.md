@@ -75,6 +75,7 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 
 **Acceptance criteria**:
 - [ ] Plugin and n8n agree on the same namespace derivation algorithm
+- [ ] Algorithm normalizes the full Vektra-allowed character set: only `[0-9a-zA-Z_-]` survives; `/`, `:`, accented characters, and other non-allowed bytes are mapped to `-` (extended after CodeRabbit comment 3144124468)
 - [ ] Documentation (README per-course setup) flags the convention
 - [ ] Existing ingested courses continue to work without re-ingestion
 
@@ -104,6 +105,121 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 **Acceptance criteria**:
 - [ ] `addRule('config_welcome_message', maximumchars(500), 'maxlength', 500)` in `edit_form.php::specific_definition`
 - [ ] Optional: `validation()` method to trim + reject > 500 server-side
+
+### BUG-004: n8n workflow uses `require('http')` only — fails on HTTPS endpoints
+
+**Status**: planned | **Priority**: critical | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124469
+
+**Context**: Both `Handle Deletions` and `Process Single File` code nodes in `n8n/workflows/moodle-ingest.json` import only `const http = require('http')` and default `port: url.port || 80`. Any production deployment with HTTPS Vektra (`https://vektra.example.com`) or HTTPS Moodle will either fail to connect or silently default to port 80 instead of 443. Local HTTP-only dev works; HTTPS-fronted production is broken.
+
+**Acceptance criteria**:
+- [ ] `httpReq` helper imports both `http` and `https`
+- [ ] Protocol detected from `URL.protocol`; appropriate module selected
+- [ ] Port defaults to 443 for `https:`, 80 for `http:`, with explicit `url.port` taking precedence
+- [ ] Change applied in both `Handle Deletions` and `Process Single File` nodes
+- [ ] Manual test: trigger workflow against an HTTPS Vektra endpoint
+
+### BUG-005: docker-compose.yml hardcoded `:80:80` binding hostile to solo-dev
+
+**Status**: planned | **Priority**: high | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124460
+
+**Context**: `docker/docker-compose.yml` line 26 binds host port `80` unconditionally; line 28 defaults `MOODLE_URL=http://vektra-moodle`. Two compounded issues:
+1. `:80:80` collides with anything already on host port 80 (apache, nginx, other containers) and requires elevated privileges on Linux unless rootless Docker is configured.
+2. Browser access to `http://localhost:10180` redirects to `http://vektra-moodle`, which only resolves inside Docker. Solo dev needs hosts-file edit or explicit `MOODLE_URL` override.
+
+The `:80:80` binding exists for n8n integration (n8n's default also expects `http://vektra-moodle`); the conflict is between "n8n out-of-the-box" and "solo dev clone + up".
+
+**Acceptance criteria**:
+- [ ] Default `MOODLE_URL` restored to `http://localhost:${MOODLE_PORT:-10180}` for solo dev
+- [ ] `:80:80` binding either removed or made opt-in via env var (e.g., `MOODLE_HOST_PORT_80=true`)
+- [ ] n8n setup docs updated to reflect the new default and how to enable the n8n-friendly mode
+
+### BUG-006: n8n README references non-existent `n8n publish:workflow` CLI
+
+**Status**: planned | **Priority**: high | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124466
+
+**Context**: `n8n/README.md` lines 124-127 instruct users to run `docker compose exec n8n n8n publish:workflow --id=<workflow-id>` after upgrading from n8n 1.x to 2.x. The n8n CLI does NOT have a `publish:workflow` subcommand in 2.x — publishing is a UI-only feature now (or via REST API). Users following this guidance hit "command not found".
+
+**Suggested replacement** (from CodeRabbit review reply 3144139479):
+- **REST API approach** (programmatic activation):
+  ```bash
+  curl --request="PATCH" "http://localhost:5678/api/v1/workflows/<workflow-id>/activate" \
+    --header="X-N8N-API-KEY: <your-n8n-api-key>"
+  ```
+- **UI-only path**: open the workflow in the n8n editor and click **Publish** (simplest for users without API key access)
+
+**Acceptance criteria**:
+- [ ] Replace `publish:workflow` instruction with the correct activation method (UI re-publish, or REST API call snippet)
+- [ ] Verify on a fresh n8n 2.x install
+
+### BUG-007: n8n README 409 remediation contradicts state-file architecture
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124467
+
+**Context**: `n8n/README.md` lines 209-211 tell users to clear "the workflow static data (Settings > Static Data > Clear)" to resolve a 409 Conflict. The workflow no longer uses n8n static data for file tracking — it uses a JSON file at `STATE_FILE_PATH` (default `/home/node/.n8n/moodle-ingest-state.json`), as documented just below in lines 215-219. The "Static Data > Clear" step is a no-op for this state and leaves users stuck.
+
+**Acceptance criteria**:
+- [ ] 409 remediation step references the JSON state file (or links to "Force re-processing of all files" section)
+
+### BUG-008: n8n state-file writes are not atomic
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124472
+
+**Context**: `Process Single File` does `readState()` → mutate → `writeState(state)` with no locking and no temp-file+rename. Safe at default `batchSize=1` with non-overlapping cron ticks, but a long ingestion overlapping the next tick (or anyone bumping batchSize for throughput) produces lost-update races on the JSON file.
+
+**Acceptance criteria**:
+- [ ] `writeState` uses temp file + atomic rename (`writeFileSync(tmp, …); renameSync(tmp, STATE_FILE)`)
+- [ ] Optional: simple lockfile around `readState`/`writeState` with retry/backoff
+- [ ] Or: switch to a real KV store
+
+### BUG-009: n8n `_pendingDeletes` static data leaks across runs on partial failure
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124471
+
+**Context**: `Split Files` stashes per-namespace delete results in `$getWorkflowStaticData('global')._pendingDeletes[namespace]`; `Merge Course Results` is the only consumer. If anything between the two throws (uncaught process-file exception, workflow cancel, n8n restart), the entry persists into the next scheduled run and is re-emitted — inflating totals and confusing operators.
+
+**Acceptance criteria**:
+- [ ] Either: key by `namespace + executionId` and reap stale entries on entry
+- [ ] Or: pipe `deleteResults` through the data flow instead of static storage
+
+### BUG-010: n8n API key guidance is too permissive
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15, comment 3144124463
+
+**Context**: `n8n/README.md` lines 67-70 instruct creating a single `n8n-moodle-sync` key with `["ingest", "admin"]` scopes. The `admin` scope is far broader than what `DELETE /api/v1/documents/batch` requires; a leaked sync key would expose the full admin surface (api-keys, namespaces, etc.).
+
+**Acceptance criteria**:
+- [ ] Either: explicit warning that `admin` grants full admin (with rotation/storage hygiene callout)
+- [ ] Or (preferred if backend supports it): split into two keys (ingest-only + narrower delete-capable)
+
+### TECH-001: Code-quality and documentation polish (CodeRabbit nitpicks)
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-26
+**Origin**: CodeRabbit review on PR #15 — review body nitpicks
+
+**Context**: Bundle of 11 nitpicks spanning multiple files. None are bugs; all are code-quality or doc improvements that can be addressed together in a single low-risk pass.
+
+**Items**:
+- `.s2s/CONTEXT.md:35` — update "in scope" to mention v0.5.0 additions (branding, behavioral controls)
+- `n8n/docker-compose.yml:31-39` — parameterize external network names via env vars (`${VEKTRA_STACK_NETWORK:-vektra-stack_default}`, `${MOODLE_NETWORK:-docker_default}`)
+- `n8n/.env.example:15` — quote `INGEST_CRON` value for portability across dotenv parsers
+- `edit_form.php:250-262` + `block_vektra.php:148-154` — extract namespace resolution into a reusable helper (e.g., `vektra_client::resolve_namespace($block, $page)`) to prevent drift (also addresses BUG-002)
+- `settings.php:83-89` — stricter validation on `default_primary_color` (custom closure restricted to hex/rgb/named CSS colors)
+- `classes/vektra_client.php:243-283` — micro-improvement: avoid emitting `"[]"` / `"{}"` when unknown nested error shape is empty (fall back to `HTTP {code}`)
+- `CONTRIBUTING.md:69` — harden the example PHP lint command against unusual filenames (`-print0` / `xargs -0`)
+- `block_vektra.php:256-259` — reuse `$this->title` (set in `specialization()`) instead of recomputing the default title
+- `n8n/README.md:7` — add language identifiers to fenced code blocks
+- `n8n/README.md:223-230` — production guidance should explicitly call out TLS and credential handling (cross-link with BUG-004 once HTTPS support lands)
+
+**Acceptance criteria**:
+- [ ] All items above addressed (one PR, batched)
 
 ---
 
