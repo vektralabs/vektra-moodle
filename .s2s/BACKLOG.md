@@ -146,8 +146,8 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 **Suggested replacement** (from CodeRabbit review reply 3144139479):
 - **REST API approach** (programmatic activation):
   ```bash
-  curl -X PATCH http://localhost:5678/api/v1/workflows/<workflow-id>/activate \
-    -H "X-N8N-API-KEY: <your-n8n-api-key>"
+  curl --request="PATCH" "http://localhost:5678/api/v1/workflows/<workflow-id>/activate" \
+    --header="X-N8N-API-KEY: <your-n8n-api-key>"
   ```
 - **UI-only path**: open the workflow in the n8n editor and click **Publish** (simplest for users without API key access)
 
