@@ -100,6 +100,10 @@ class block_vektra_edit_form extends block_edit_form {
             ['rows' => 2, 'cols' => 60]
         );
         $mform->setType('config_welcome_message', PARAM_TEXT);
+        // Note: the 'client' validation flag in HTML_QuickForm::addRule means
+        // "client + server", not "client only". Server-side validation runs
+        // unconditionally for every registered rule (see lib/pear/HTML/QuickForm.php
+        // ::validate()); the flag only controls whether JS is also generated.
         $mform->addRule(
             'config_welcome_message',
             get_string('maximumchars', '', 500),

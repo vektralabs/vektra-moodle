@@ -50,15 +50,8 @@ class namespace_resolver {
         if (is_string($ns) && $ns !== '') {
             return $ns;
         }
-        $cid = $config?->course_id ?? null;
-        if (is_string($cid) && $cid !== '') {
-            return $cid;
-        }
-        $sn = $course?->shortname ?? null;
-        if (is_string($sn) && $sn !== '') {
-            return $sn;
-        }
-        return '';
+        // Tail of the namespace chain matches the course_id chain exactly.
+        return self::resolve_course_id($config, $course);
     }
 
     /**
