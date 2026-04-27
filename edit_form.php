@@ -92,7 +92,7 @@ class block_vektra_edit_form extends block_edit_form {
         $mform->setType('config_language', PARAM_ALPHA);
         $mform->addHelpButton('config_language', 'config_language', 'block_vektra');
 
-        // Welcome message override (textarea, optional).
+        // Welcome message override (textarea, optional, max 500 chars per plan Phase C5).
         $mform->addElement(
             'textarea',
             'config_welcome_message',
@@ -100,6 +100,13 @@ class block_vektra_edit_form extends block_edit_form {
             ['rows' => 2, 'cols' => 60]
         );
         $mform->setType('config_welcome_message', PARAM_TEXT);
+        $mform->addRule(
+            'config_welcome_message',
+            get_string('maximumchars', '', 500),
+            'maxlength',
+            500,
+            'client'
+        );
         $mform->addHelpButton('config_welcome_message', 'config_welcome_message', 'block_vektra');
 
         // Behavioral section: grounding_mode and show_sources_choice are saved on
