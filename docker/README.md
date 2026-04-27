@@ -82,6 +82,70 @@ docker exec vektra-moodle php /var/www/html/admin/cli/purge_caches.php
 | Moodle | 10180 | `MOODLE_PORT` |
 | MariaDB | 10306 | `MARIADB_PORT` |
 
+## HTTPS deployment
+
+To run Moodle behind an nginx HTTPS reverse proxy, three things must be configured
+in addition to the standard setup above.
+
+### 1. nginx reverse proxy
+
+Use `docker/nginx/https-reverse-proxy.conf.example` as a starting point.
+Copy it to `/etc/nginx/sites-available/` on the host, fill in `server_name`,
+`ssl_certificate` paths, and the Vektra host-mapped port (default `10800`), then enable it.
+
+The config handles three concerns in nginx, with no Apache `mod_proxy` needed:
+- HTTP → HTTPS redirect (port 80)
+- Moodle proxy on `/` → `127.0.0.1:MOODLE_PORT` (default `10180`)
+- Vektra proxy on `/vektra/` → `127.0.0.1:10800`
+
+If you change `MOODLE_PORT` in `.env`, update `proxy_pass` in the nginx config accordingly.
+
+Critical: nginx must send `Host: moodle.internal` (or any hostname that does **not**
+match the Moodle `wwwroot` host). Moodle 5 throws `reverseproxyabused` when
+`reverseproxy=true` and the `Host` header equals the `wwwroot` host.
+
+### 2. Moodle config.php
+
+Inside the Moodle container at `/var/www/html/config.php`, set:
+
+```php
+$CFG->wwwroot      = "https://your-moodle.example.com";
+$CFG->reverseproxy = true;
+$CFG->sslproxy     = true;
+```
+
+`sslproxy` tells PHP to treat `X-Forwarded-Proto: https` as `$_SERVER['HTTPS'] = 'on'`.
+Without it, Moodle generates `http://` asset URLs even over HTTPS.
+
+### 3. Plugin Public URL
+
+After switching to HTTPS, update the **Public URL** plugin setting to the HTTPS origin.
+This is the URL the browser uses to load the chatbot widget JS and call the Vektra API.
+
+Via CLI (inside the Moodle container):
+
+```bash
+docker exec vektra-moodle php /var/www/html/admin/cli/cfg.php \
+  --component=block_vektra --name=publicurl --set="https://your-moodle.example.com/vektra"
+```
+
+Or via **Site administration > Plugins > Blocks > Vektra AI Assistant**.
+
+Also add the HTTPS origin to `VEKTRA_CORS_ORIGINS` in the vektra-stack `.env` and
+recreate the Vektra container (`docker compose up -d`).
+
+### 4. n8n ingestion workflow
+
+After changing `wwwroot` to HTTPS, Moodle generates all file download URLs with the
+HTTPS base. Update `MOODLE_URL` in `n8n/.env` to match:
+
+```
+MOODLE_URL=https://your-moodle.example.com
+```
+
+The n8n workflow supports HTTPS natively — no other changes required.
+See `n8n/README.md` → Deployment to Production → HTTPS deployments.
+
 ## Remote access (SSH tunnel)
 
 When accessing from a remote machine, tunnel **both** Moodle and Vektra ports:
