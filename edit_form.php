@@ -92,7 +92,7 @@ class block_vektra_edit_form extends block_edit_form {
         $mform->setType('config_language', PARAM_ALPHA);
         $mform->addHelpButton('config_language', 'config_language', 'block_vektra');
 
-        // Welcome message override (textarea, optional).
+        // Welcome message override (textarea, optional, max 500 chars per plan Phase C5).
         $mform->addElement(
             'textarea',
             'config_welcome_message',
@@ -100,6 +100,17 @@ class block_vektra_edit_form extends block_edit_form {
             ['rows' => 2, 'cols' => 60]
         );
         $mform->setType('config_welcome_message', PARAM_TEXT);
+        // Note: the 'client' validation flag in HTML_QuickForm::addRule means
+        // "client + server", not "client only". Server-side validation runs
+        // unconditionally for every registered rule (see lib/pear/HTML/QuickForm.php
+        // ::validate()); the flag only controls whether JS is also generated.
+        $mform->addRule(
+            'config_welcome_message',
+            get_string('maximumchars', '', 500),
+            'maxlength',
+            500,
+            'client'
+        );
         $mform->addHelpButton('config_welcome_message', 'config_welcome_message', 'block_vektra');
 
         // Behavioral section: grounding_mode and show_sources_choice are saved on
@@ -241,24 +252,15 @@ class block_vektra_edit_form extends block_edit_form {
     /**
      * Resolve the effective namespace for this block instance.
      *
-     * Mirrors the backend default chain used on the JWT path: explicit namespace
-     * override > course_id override > course shortname. When the namespace field
-     * is empty the Vektra backend falls back to the course_id, so the form's
-     * admin GET must target that same identifier or it will fetch the wrong
-     * config when a teacher uses a custom course_id without a namespace.
+     * Delegates to the shared `\block_vektra\namespace_resolver` so the form's
+     * admin GET targets the same identifier the backend uses on the JWT path
+     * (explicit namespace override > course_id override > course shortname).
      */
     private function resolve_namespace(): string {
-        $cfg = $this->block->config ?? null;
-        if (is_object($cfg) && !empty($cfg->namespace)) {
-            return (string) $cfg->namespace;
-        }
-        if (is_object($cfg) && !empty($cfg->course_id)) {
-            return (string) $cfg->course_id;
-        }
-        if (!empty($this->page->course->shortname)) {
-            return (string) $this->page->course->shortname;
-        }
-        return '';
+        return \block_vektra\namespace_resolver::resolve(
+            $this->block->config ?? null,
+            $this->page->course ?? null
+        );
     }
 
     /**

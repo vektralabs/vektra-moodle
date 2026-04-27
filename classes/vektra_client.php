@@ -275,8 +275,13 @@ class vektra_client {
                 $message = (string) $first['msg'];
                 return [$errorcode, $message];
             }
-            // Unknown nested shape — surface compactly.
-            $message = json_encode($detail);
+            // Unknown nested shape — surface compactly, but only when there is
+            // something useful to show. An empty array/object would otherwise
+            // collapse the friendly "HTTP {code}" fallback into "[]" or "{}".
+            $encoded = json_encode($detail);
+            if (is_string($encoded) && $encoded !== '[]' && $encoded !== '{}') {
+                $message = $encoded;
+            }
         }
 
         return [$errorcode, $message];

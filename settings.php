@@ -80,12 +80,11 @@ if ($ADMIN->fulltree) {
         get_string('settings_branding_desc', 'block_vektra')
     ));
 
-    $settings->add(new admin_setting_configtext(
+    $settings->add(new admin_setting_configcolourpicker(
         'block_vektra/default_primary_color',
         get_string('settings_primary_color', 'block_vektra'),
         get_string('settings_primary_color_desc', 'block_vektra'),
-        '',
-        PARAM_TEXT
+        ''
     ));
 
     $settings->add(new admin_setting_configtext(

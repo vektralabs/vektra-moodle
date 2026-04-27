@@ -140,18 +140,10 @@ class block_vektra extends block_base {
             return;
         }
 
-        // Resolve namespace from the just-saved data, mirroring the backend default
-        // chain (explicit override > course_id override > course shortname). The
-        // backend uses course_id as the implicit namespace when none is sent on the
-        // JWT path, so admin GET/PATCH must target the same identifier.
-        $namespace = '';
-        if (!empty($data->namespace)) {
-            $namespace = (string) $data->namespace;
-        } else if (!empty($data->course_id)) {
-            $namespace = (string) $data->course_id;
-        } else if (!empty($this->page->course->shortname)) {
-            $namespace = (string) $this->page->course->shortname;
-        }
+        // Resolve namespace via the shared chain (explicit override > course_id
+        // override > course shortname) so admin GET/PATCH targets the same
+        // identifier the backend uses on the JWT path.
+        $namespace = \block_vektra\namespace_resolver::resolve($data, $this->page->course);
         if ($namespace === '') {
             \core\notification::warning(
                 get_string('save_warning_no_namespace', 'block_vektra')
@@ -208,13 +200,11 @@ class block_vektra extends block_base {
 
         $course = $this->page->course;
 
-        // Determine course_id: use per-instance override or Moodle shortname.
-        $courseid = !empty($this->config?->course_id)
-            ? $this->config->course_id
-            : $course->shortname;
+        // Determine course_id via the shared resolver (override > shortname; '0'-safe).
+        $courseid = \block_vektra\namespace_resolver::resolve_course_id($this->config, $course);
 
-        // Determine namespace: explicit config, or null to let the API default to course_id.
-        // Note: !empty() treats '0' as empty, but '0' is valid for PARAM_ALPHANUMEXT.
+        // Determine namespace: explicit config only, or null to let the API
+        // default to course_id on the JWT path.
         $ns = $this->config?->namespace;
         $namespace = (is_string($ns) && $ns !== '') ? $ns : null;
 
@@ -253,10 +243,10 @@ class block_vektra extends block_base {
             'sesskey'  => sesskey(),
         ]);
 
-        // Title: prefer instance override, otherwise the course-aware localized default.
-        $widgettitle = !empty($this->config?->title)
-            ? (string) $this->config->title
-            : get_string('default_title', 'block_vektra', $course->fullname ?? '');
+        // Title: reuse $this->title set by specialization() (instance override
+        // when non-empty, otherwise the course-aware localized default). Avoids
+        // recomputing the same value here.
+        $widgettitle = (string) $this->title;
 
         $attributes = [
             'src'                    => $widgeturl,
