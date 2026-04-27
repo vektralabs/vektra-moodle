@@ -22,7 +22,7 @@ The workflow runs on a configurable schedule (default: every 5 minutes) and:
 3. Compares against stored state to detect new, updated, and removed files
 4. Downloads new/updated files and ingests them into Vektra
 5. Deletes documents from Vektra when files are removed from Moodle
-6. Maps Moodle course shortname to Vektra namespace (1:1)
+6. Maps Moodle course shortname to Vektra namespace via slugification (see [Namespace Convention](#namespace-convention))
 
 ## Prerequisites
 
@@ -134,8 +134,9 @@ and vektra-moodle are running first, otherwise startup will fail.
 3. Check the **Ingestion Summary** node output
 4. Verify the document exists in Vektra via the API:
    ```bash
-   curl http://localhost:8000/api/v1/documents?namespace=<course-shortname> \
+   curl http://localhost:8000/api/v1/documents?namespace=<course-slug> \
      -H "Authorization: Bearer <api-key>"
+   # <course-slug> is the slugified shortname — see Namespace Convention
    ```
 5. **Test update**: Re-upload a modified version of the same file, trigger again
 6. **Test deletion**: Remove the file from Moodle, trigger again
@@ -187,6 +188,29 @@ Supported MIME types:
 - PPTX (`application/vnd.openxmlformats-officedocument.presentationml.presentation`)
 - Markdown (`text/markdown`)
 
+### Namespace Convention
+
+The workflow derives the Vektra namespace from the Moodle course shortname by applying a fixed slugification algorithm. The Moodle block plugin applies the same algorithm when querying Vektra, so both sides always target the same namespace.
+
+**Algorithm** (applied to the raw `shortname` field):
+1. NFD decompose + strip combining marks (accent removal: `è` → `e`, `ñ` → `n`)
+2. Lowercase
+3. Replace any character outside `[0-9a-z_-]` with `-`
+4. Collapse consecutive `-`
+5. Trim leading/trailing `-`
+6. Truncate to 50 characters
+
+**Examples**:
+
+| Shortname | Namespace |
+|-----------|-----------|
+| `psicologia-generale` | `psicologia-generale` |
+| `Course 101` | `course-101` |
+| `Física Cuántica` | `fisica-cuantica` |
+| `Diritto: intro` | `diritto-intro` |
+
+**Important**: the explicit `course_id` and `namespace` overrides on the block settings are used as-is (no slugification). Only the shortname fallback is slugified. If a course shortname produces an unexpected namespace slug, set an explicit `course_id` override in the block settings.
+
 ## Troubleshooting
 
 ### "Invalid token" from Moodle
@@ -228,3 +252,15 @@ Follow the same steps, adjusting URLs to match your production environment:
 - `VEKTRA_API_URL`: your production Vektra API URL
 - Generate new tokens and API keys for production
 - Consider a longer polling interval for production (e.g., every 30 minutes)
+
+### HTTPS deployments
+
+If Moodle is served over HTTPS (see `docker/README.md` — HTTPS deployment), set `MOODLE_URL` to the full HTTPS URL matching `$CFG->wwwroot`:
+
+```
+MOODLE_URL=https://your-moodle.example.com
+```
+
+The workflow's `httpReq` helper supports both HTTP and HTTPS — it selects the correct module at runtime based on the URL scheme. No additional configuration is required.
+
+> **Important**: `MOODLE_URL` must match `$CFG->wwwroot` exactly. Moodle generates all file download URLs using `wwwroot` as the base, so a mismatch (e.g. HTTP `MOODLE_URL` with HTTPS `wwwroot`) will cause every file download to fail silently.
