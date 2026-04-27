@@ -241,24 +241,15 @@ class block_vektra_edit_form extends block_edit_form {
     /**
      * Resolve the effective namespace for this block instance.
      *
-     * Mirrors the backend default chain used on the JWT path: explicit namespace
-     * override > course_id override > course shortname. When the namespace field
-     * is empty the Vektra backend falls back to the course_id, so the form's
-     * admin GET must target that same identifier or it will fetch the wrong
-     * config when a teacher uses a custom course_id without a namespace.
+     * Delegates to the shared `\block_vektra\namespace_resolver` so the form's
+     * admin GET targets the same identifier the backend uses on the JWT path
+     * (explicit namespace override > course_id override > course shortname).
      */
     private function resolve_namespace(): string {
-        $cfg = $this->block->config ?? null;
-        if (is_object($cfg) && !empty($cfg->namespace)) {
-            return (string) $cfg->namespace;
-        }
-        if (is_object($cfg) && !empty($cfg->course_id)) {
-            return (string) $cfg->course_id;
-        }
-        if (!empty($this->page->course->shortname)) {
-            return (string) $this->page->course->shortname;
-        }
-        return '';
+        return \block_vektra\namespace_resolver::resolve(
+            $this->block->config ?? null,
+            $this->page->course ?? null
+        );
     }
 
     /**
