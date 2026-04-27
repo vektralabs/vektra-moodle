@@ -6,7 +6,7 @@ services:
       - "${N8N_PORT:-5678}:5678"
     environment:
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-      - NODE_FUNCTION_ALLOW_BUILTIN=fs,http,url
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs,http,https,url
       - NODE_FUNCTION_ALLOW_EXTERNAL=
       - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Rome}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
