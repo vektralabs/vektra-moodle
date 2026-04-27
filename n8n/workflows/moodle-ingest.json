@@ -16,7 +16,10 @@
       "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ]
     },
     {
       "parameters": {
@@ -25,9 +28,18 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "wstoken", "value": "={{ $env.MOODLE_WS_TOKEN }}" },
-            { "name": "wsfunction", "value": "core_course_get_courses" },
-            { "name": "moodlewsrestformat", "value": "json" }
+            {
+              "name": "wstoken",
+              "value": "={{ $env.MOODLE_WS_TOKEN }}"
+            },
+            {
+              "name": "wsfunction",
+              "value": "core_course_get_courses"
+            },
+            {
+              "name": "moodlewsrestformat",
+              "value": "json"
+            }
           ]
         },
         "options": {}
@@ -36,7 +48,10 @@
       "name": "Get Courses",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [240, 0]
+      "position": [
+        240,
+        0
+      ]
     },
     {
       "parameters": {
@@ -46,15 +61,23 @@
       "name": "Filter Courses",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 0]
+      "position": [
+        480,
+        0
+      ]
     },
     {
-      "parameters": { "options": {} },
+      "parameters": {
+        "options": {}
+      },
       "id": "loop-courses",
       "name": "Loop Courses",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [720, 0]
+      "position": [
+        720,
+        0
+      ]
     },
     {
       "parameters": {
@@ -63,10 +86,22 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            { "name": "wstoken", "value": "={{ $env.MOODLE_WS_TOKEN }}" },
-            { "name": "wsfunction", "value": "core_course_get_contents" },
-            { "name": "courseid", "value": "={{ $json.id }}" },
-            { "name": "moodlewsrestformat", "value": "json" }
+            {
+              "name": "wstoken",
+              "value": "={{ $env.MOODLE_WS_TOKEN }}"
+            },
+            {
+              "name": "wsfunction",
+              "value": "core_course_get_contents"
+            },
+            {
+              "name": "courseid",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "moodlewsrestformat",
+              "value": "json"
+            }
           ]
         },
         "options": {
@@ -82,17 +117,23 @@
       "name": "Get Course Contents",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 240]
+      "position": [
+        960,
+        240
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nconst namespace = rawShortname.toLowerCase().replace(/\\s+/g, '-');\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\nif (!Array.isArray(sections)) {\n  return [{ json: { error: 'Unexpected response format', courseId, namespace, files: [] } }];\n}\n\nconst files = [];\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files } }];"
+        "jsCode": "const SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\nconst namespace = slugify(rawShortname, courseId);\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\n// Safety: if Moodle returned an error or unexpected format, abort with _moodleError flag.\n// Returning files:[] would cause Dedup&Diff to mark ALL stored files as deleted — catastrophic.\nif (!Array.isArray(sections)) {\n  const raw = JSON.stringify(sections).slice(0, 200);\n  return [{ json: { _moodleError: true, errorDetail: raw, courseId, namespace, files: [] } }];\n}\n\nconst files = [];\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files } }];"
       },
       "id": "extract-files",
       "name": "Extract Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 240]
+      "position": [
+        1200,
+        240
+      ]
     },
     {
       "parameters": {
@@ -102,7 +143,10 @@
       "name": "Dedup & Diff",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 240]
+      "position": [
+        1440,
+        240
+      ]
     },
     {
       "parameters": {
@@ -117,7 +161,10 @@
               "id": "has-deletions",
               "leftValue": "={{ $json.toDelete.length }}",
               "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
             }
           ],
           "combinator": "and"
@@ -128,7 +175,10 @@
       "name": "Has Deletions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1680, 240]
+      "position": [
+        1680,
+        240
+      ]
     },
     {
       "parameters": {
@@ -138,7 +188,10 @@
       "name": "Handle Deletions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1920, 120]
+      "position": [
+        1920,
+        120
+      ]
     },
     {
       "parameters": {
@@ -153,7 +206,10 @@
               "id": "has-ingestions",
               "leftValue": "={{ $json.toIngest.length }}",
               "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
             }
           ],
           "combinator": "and"
@@ -164,7 +220,10 @@
       "name": "Has Ingestions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [2160, 360]
+      "position": [
+        2160,
+        360
+      ]
     },
     {
       "parameters": {
@@ -174,15 +233,23 @@
       "name": "Split Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 240]
+      "position": [
+        2400,
+        240
+      ]
     },
     {
-      "parameters": { "options": {} },
+      "parameters": {
+        "options": {}
+      },
       "id": "loop-files",
       "name": "Loop Files",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [2640, 240]
+      "position": [
+        2640,
+        240
+      ]
     },
     {
       "parameters": {
@@ -192,7 +259,10 @@
       "name": "Process Single File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 480]
+      "position": [
+        2880,
+        480
+      ]
     },
     {
       "parameters": {
@@ -202,7 +272,10 @@
       "name": "Merge Course Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 0]
+      "position": [
+        2880,
+        0
+      ]
     },
     {
       "parameters": {
@@ -212,7 +285,10 @@
       "name": "No Changes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 600]
+      "position": [
+        2400,
+        600
+      ]
     },
     {
       "parameters": {
@@ -222,67 +298,206 @@
       "name": "Ingestion Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3360, 0]
+      "position": [
+        3360,
+        0
+      ]
     }
   ],
   "pinData": {},
   "connections": {
     "Schedule Trigger": {
-      "main": [[{ "node": "Get Courses", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Get Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Get Courses": {
-      "main": [[{ "node": "Filter Courses", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Filter Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Filter Courses": {
-      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Loop Courses": {
       "main": [
-        [{ "node": "Ingestion Summary", "type": "main", "index": 0 }],
-        [{ "node": "Get Course Contents", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Ingestion Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Course Contents",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Course Contents": {
-      "main": [[{ "node": "Extract Files", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extract Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract Files": {
-      "main": [[{ "node": "Dedup & Diff", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Dedup & Diff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Dedup & Diff": {
-      "main": [[{ "node": "Has Deletions?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Deletions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Deletions?": {
       "main": [
-        [{ "node": "Handle Deletions", "type": "main", "index": 0 }],
-        [{ "node": "Has Ingestions?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Handle Deletions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Ingestions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Handle Deletions": {
-      "main": [[{ "node": "Has Ingestions?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Ingestions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Ingestions?": {
       "main": [
-        [{ "node": "Split Files", "type": "main", "index": 0 }],
-        [{ "node": "No Changes", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Split Files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Split Files": {
-      "main": [[{ "node": "Loop Files", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Loop Files": {
       "main": [
-        [{ "node": "Merge Course Results", "type": "main", "index": 0 }],
-        [{ "node": "Process Single File", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Merge Course Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Single File",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Process Single File": {
-      "main": [[{ "node": "Loop Files", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Merge Course Results": {
-      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "No Changes": {
-      "main": [[{ "node": "Loop Courses", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Loop Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
