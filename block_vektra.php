@@ -243,10 +243,10 @@ class block_vektra extends block_base {
             'sesskey'  => sesskey(),
         ]);
 
-        // Title: prefer instance override, otherwise the course-aware localized default.
-        $widgettitle = !empty($this->config?->title)
-            ? (string) $this->config->title
-            : get_string('default_title', 'block_vektra', $course->fullname ?? '');
+        // Title: reuse $this->title set by specialization() (instance override
+        // when non-empty, otherwise the course-aware localized default). Avoids
+        // recomputing the same value here.
+        $widgettitle = (string) $this->title;
 
         $attributes = [
             'src'                    => $widgeturl,
