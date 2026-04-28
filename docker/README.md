@@ -139,7 +139,7 @@ recreate the Vektra container (`docker compose up -d`).
 After changing `wwwroot` to HTTPS, Moodle generates all file download URLs with the
 HTTPS base. Update `MOODLE_URL` in `n8n/.env` to match:
 
-```
+```env
 MOODLE_URL=https://your-moodle.example.com
 ```
 
