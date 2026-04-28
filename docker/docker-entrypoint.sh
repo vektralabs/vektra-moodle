@@ -92,14 +92,18 @@ fi
 # settings Moodle sees HTTP, compares against https:// wwwroot, and loops.
 # Each setting is checked independently so a partial config (only one
 # of the two present) is repaired rather than skipped.
-if [[ "$MOODLE_URL" == https://* ]] && [ -f /var/www/html/config.php ]; then
+if [[ "$MOODLE_URL" == https://* ]] && [ -f "/var/www/html/config.php" ]; then
     INJECTED=0
-    if ! grep -Eq '^\s*\$CFG->reverseproxy\s*=' /var/www/html/config.php; then
-        sed -i "/^\$CFG->wwwroot/a \$CFG->reverseproxy = true;" /var/www/html/config.php
+    # The address pattern requires an actual assignment to $CFG->wwwroot
+    # (anchored on `=`, allowing leading whitespace). Without the `=`
+    # anchor the previous version also matched lines like
+    # `$CFG->wwwroot_backup = ...` and would inject after each match.
+    if ! grep -Eq '^\s*\$CFG->reverseproxy\s*=' "/var/www/html/config.php"; then
+        sed -i "/^\s*\$CFG->wwwroot\s*=/a \$CFG->reverseproxy = true;" "/var/www/html/config.php"
         INJECTED=1
     fi
-    if ! grep -Eq '^\s*\$CFG->sslproxy\s*=' /var/www/html/config.php; then
-        sed -i "/^\$CFG->wwwroot/a \$CFG->sslproxy     = true;" /var/www/html/config.php
+    if ! grep -Eq '^\s*\$CFG->sslproxy\s*=' "/var/www/html/config.php"; then
+        sed -i "/^\s*\$CFG->wwwroot\s*=/a \$CFG->sslproxy     = true;" "/var/www/html/config.php"
         INJECTED=1
     fi
     if [ "$INJECTED" -eq 1 ]; then
