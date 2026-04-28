@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-04-28 (Batch C in flight)
+**Updated**: 2026-04-28 (Batch C round-1 review fixes)
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -366,4 +366,38 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - [x] Threshold sourced from `$env.DELETION_SAFETY_THRESHOLD` with default `3`
 - [x] Documented in `n8n/README.md` and `n8n/.env.example`
 - [x] Emit a clear log entry when the safety triggers (operator visibility)
+
+### BUG-015: docker-entrypoint sed pattern not robust
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #20, comments 3155335883 + 3155335915 (sister comments)
+
+**Implementation** (commit 5c2253a on branch `fix/v0.5.0-batch-c`):
+- Address pattern hardened from `/^\$CFG->wwwroot/` to `/^\s*\$CFG->wwwroot\s*=/`. The `=` anchor prevents accidental match on unrelated assignments like `$CFG->wwwroot_backup = ...`; the `\s*` prefix tolerates indented config files.
+- File path literal `/var/www/html/config.php` now quoted in both `grep` and `sed` invocations per repository shell convention (`.claude/CLAUDE.md`).
+- Verified against three fixtures: standard config, indented config, and config with both `$CFG->wwwroot = ...` and `$CFG->wwwroot_backup = ...` (no double-injection).
+
+**Context**: The `reverseproxy`/`sslproxy` injection logic added in PR #19 (commit 545e179, refined in PR #20 commit b17fb91) used `/^\$CFG->wwwroot/` as the sed address. This matched any line starting with `$CFG->wwwroot` regardless of suffix or `=` operator, so configurations with multiple wwwroot-prefixed variables would receive duplicate injections. It also failed silently on indented config.php files.
+
+**Acceptance criteria**:
+- [x] Address pattern requires `\s*` prefix and `=` anchor
+- [x] File path quoted in grep + sed
+- [x] No regression on standard config.php
+
+### BUG-016: n8n safety-net preserved files invisible in Ingestion Summary
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #20, comment 3155335938
+
+**Implementation** (commit fba0c4e on branch `fix/v0.5.0-batch-c`):
+- `Dedup & Diff` now populates `unchanged` with one minimal entry per stored file (`{fileurl, filename, uniqueFilename, _safetyPreserved: true}`) when the safety net triggers.
+- These entries flow through `No Changes` (mapped to `{action: 'unchanged', status: 'skipped'}`) and `Ingestion Summary` (counted in `totalUnchanged`), so the final summary now reports the correct N preserved files instead of `0`.
+- The console.log "Empty-course safety triggered" message added in TECH-002 still fires for execution-detail visibility.
+
+**Context**: TECH-002 made `DELETION_SAFETY_THRESHOLD` configurable and added a console.log when triggered. But the visible signal in the n8n UI summary still showed `0 unchanged` when the safety preserved N files, because `Dedup & Diff` returned `unchanged: []` while reporting `summary.unchanged: N` only in its local node output. Operators could only see the safety event by drilling into execution logs.
+
+**Acceptance criteria**:
+- [x] `unchanged` array populated with one entry per stored file when safety triggers
+- [x] `Ingestion Summary` reports the preserved count (not `0`)
+- [x] No regression on normal flows (verified across 5 scenarios)
 
