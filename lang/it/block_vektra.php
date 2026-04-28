@@ -66,9 +66,9 @@ $string['settings_powered_by_url_desc'] = 'URL opzionale a cui collegare il test
 // Instance settings.
 $string['config_title'] = 'Titolo blocco';
 $string['config_course_id'] = 'ID corso Vektra';
-$string['config_course_id_help'] = 'L\'identificativo del corso in Vektra. Lascia vuoto per usare il nome breve del corso Moodle. Deve corrispondere al course_id usato durante l\'ingestion dei materiali in Vektra.';
+$string['config_course_id_help'] = 'L\'identificativo del corso in Vektra. Lascia vuoto per usare il nome breve del corso Moodle (che viene automaticamente slugificato per corrispondere all\'algoritmo del workflow n8n di ingestion). Quando impostato esplicitamente, questo valore è inviato a Vektra così com\'è e deve rispettare il charset namespace di Vektra [0-9a-zA-Z_-]; in caso contrario le query restituiranno silenziosamente risultati vuoti. Vedi n8n/README.md "Namespace Convention" per l\'algoritmo di slugificazione.';
 $string['config_namespace'] = 'Namespace Vektra';
-$string['config_namespace_help'] = 'Sovrascrivere il namespace incluso nel token JWT (max 64 caratteri). Lascia vuoto per usare il course ID come namespace predefinito. Utile quando più corsi condividono gli stessi materiali o quando il nome breve Moodle contiene caratteri non validi per un namespace.';
+$string['config_namespace_help'] = 'Sovrascrivere il namespace incluso nel token JWT (max 64 caratteri). Lascia vuoto per usare la catena predefinita (course_id o nome breve del corso slugificato). Quando impostato esplicitamente, questo valore è inviato a Vektra così com\'è e deve rispettare il charset namespace di Vektra [0-9a-zA-Z_-]; in caso contrario le query restituiranno silenziosamente risultati vuoti.';
 $string['config_theme'] = 'Tema';
 $string['config_language'] = 'Lingua';
 $string['config_language_help'] = 'Sovrascrivere la lingua del widget (es. "en", "it"). Lascia vuoto per usare la lingua corrente di Moodle.';
