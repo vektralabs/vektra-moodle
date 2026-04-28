@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-04-26
+**Updated**: 2026-04-28 (PR #19 review round)
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -59,26 +59,6 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 - [ ] Token refresh transparent to user (no reload)
 - [ ] Refresh error handled by widget (localized message)
 
-### BUG-001: Namespace mismatch between n8n ingestion and plugin
-
-**Status**: planned | **Priority**: high | **Created**: 2026-04-26
-**Origin**: Gemini review on PR #15 (release v0.5.0), comment 3143946475
-
-**Context**: The n8n ingestion workflow (`n8n/workflows/moodle-ingest.json`) maps Moodle course shortname to Vektra namespace by **slugifying** it (lowercase + replace spaces with dashes), while the plugin uses the **raw shortname** as the fallback in the namespace resolution chain. Result: any course whose shortname contains spaces or uppercase letters silently fails — the widget queries the raw-name namespace while documents were ingested into the slugified one.
-
-Example: shortname `"Course 101"` → ingest writes to `course-101`, widget queries `Course 101` → empty results.
-
-**Proposed approach** (decide before fix):
-- Option A (recommended): plugin slugifies shortname to match n8n behavior. Lowest risk, no migration; preserves existing ingestions.
-- Option B: n8n stops slugifying. Breaks existing ingestions; requires re-ingest.
-- Option C: document the constraint and require teachers to set explicit `course_id` override on the block when shortname is non-slug-safe.
-
-**Acceptance criteria**:
-- [ ] Plugin and n8n agree on the same namespace derivation algorithm
-- [ ] Algorithm normalizes the full Vektra-allowed character set: only `[0-9a-zA-Z_-]` survives; `/`, `:`, accented characters, and other non-allowed bytes are mapped to `-` (extended after CodeRabbit comment 3144124468)
-- [ ] Documentation (README per-course setup) flags the convention
-- [ ] Existing ingested courses continue to work without re-ingestion
-
 ### BUG-002: `!empty()` resolution treats `'0'` as empty in namespace/course_id chain
 
 **Status**: planned | **Priority**: medium | **Created**: 2026-04-26
@@ -106,20 +86,6 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - [ ] `addRule('config_welcome_message', maximumchars(500), 'maxlength', 500)` in `edit_form.php::specific_definition`
 - [ ] Optional: `validation()` method to trim + reject > 500 server-side
 
-### BUG-004: n8n workflow uses `require('http')` only — fails on HTTPS endpoints
-
-**Status**: planned | **Priority**: critical | **Created**: 2026-04-26
-**Origin**: CodeRabbit review on PR #15, comment 3144124469
-
-**Context**: Both `Handle Deletions` and `Process Single File` code nodes in `n8n/workflows/moodle-ingest.json` import only `const http = require('http')` and default `port: url.port || 80`. Any production deployment with HTTPS Vektra (`https://vektra.example.com`) or HTTPS Moodle will either fail to connect or silently default to port 80 instead of 443. Local HTTP-only dev works; HTTPS-fronted production is broken.
-
-**Acceptance criteria**:
-- [ ] `httpReq` helper imports both `http` and `https`
-- [ ] Protocol detected from `URL.protocol`; appropriate module selected
-- [ ] Port defaults to 443 for `https:`, 80 for `http:`, with explicit `url.port` taking precedence
-- [ ] Change applied in both `Handle Deletions` and `Process Single File` nodes
-- [ ] Manual test: trigger workflow against an HTTPS Vektra endpoint
-
 ### BUG-005: docker-compose.yml hardcoded `:80:80` binding hostile to solo-dev
 
 **Status**: planned | **Priority**: high | **Created**: 2026-04-26
@@ -131,9 +97,11 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 
 The `:80:80` binding exists for n8n integration (n8n's default also expects `http://vektra-moodle`); the conflict is between "n8n out-of-the-box" and "solo dev clone + up".
 
+**Note** (2026-04-28): partial mitigation already shipped in commit 33f15c8 on branch `fix/v0.5.0-n8n-workflow` — the `127.0.0.1:80:80` binding was removed and the nginx-fronted layout is now the documented HTTPS path. The remaining AC (default `MOODLE_URL` for solo dev + opt-in n8n-friendly mode) still applies.
+
 **Acceptance criteria**:
+- [x] `:80:80` binding either removed or made opt-in via env var (e.g., `MOODLE_HOST_PORT_80=true`) — removed (commit 33f15c8)
 - [ ] Default `MOODLE_URL` restored to `http://localhost:${MOODLE_PORT:-10180}` for solo dev
-- [ ] `:80:80` binding either removed or made opt-in via env var (e.g., `MOODLE_HOST_PORT_80=true`)
 - [ ] n8n setup docs updated to reflect the new default and how to enable the n8n-friendly mode
 
 ### BUG-006: n8n README references non-existent `n8n publish:workflow` CLI
@@ -165,29 +133,6 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 **Acceptance criteria**:
 - [ ] 409 remediation step references the JSON state file (or links to "Force re-processing of all files" section)
 
-### BUG-008: n8n state-file writes are not atomic
-
-**Status**: planned | **Priority**: low | **Created**: 2026-04-26
-**Origin**: CodeRabbit review on PR #15, comment 3144124472
-
-**Context**: `Process Single File` does `readState()` → mutate → `writeState(state)` with no locking and no temp-file+rename. Safe at default `batchSize=1` with non-overlapping cron ticks, but a long ingestion overlapping the next tick (or anyone bumping batchSize for throughput) produces lost-update races on the JSON file.
-
-**Acceptance criteria**:
-- [ ] `writeState` uses temp file + atomic rename (`writeFileSync(tmp, …); renameSync(tmp, STATE_FILE)`)
-- [ ] Optional: simple lockfile around `readState`/`writeState` with retry/backoff
-- [ ] Or: switch to a real KV store
-
-### BUG-009: n8n `_pendingDeletes` static data leaks across runs on partial failure
-
-**Status**: planned | **Priority**: low | **Created**: 2026-04-26
-**Origin**: CodeRabbit review on PR #15, comment 3144124471
-
-**Context**: `Split Files` stashes per-namespace delete results in `$getWorkflowStaticData('global')._pendingDeletes[namespace]`; `Merge Course Results` is the only consumer. If anything between the two throws (uncaught process-file exception, workflow cancel, n8n restart), the entry persists into the next scheduled run and is re-emitted — inflating totals and confusing operators.
-
-**Acceptance criteria**:
-- [ ] Either: key by `namespace + executionId` and reap stale entries on entry
-- [ ] Or: pipe `deleteResults` through the data flow instead of static storage
-
 ### BUG-010: n8n API key guidance is too permissive
 
 **Status**: planned | **Priority**: low | **Created**: 2026-04-26
@@ -198,6 +143,21 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 **Acceptance criteria**:
 - [ ] Either: explicit warning that `admin` grants full admin (with rotation/storage hygiene callout)
 - [ ] Or (preferred if backend supports it): split into two keys (ingest-only + narrower delete-capable)
+
+### BUG-012: Document namespace override behavior in form help strings
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-28
+**Origin**: review of PR `fix/v0.5.0-n8n-workflow` (BUG-001 fix)
+
+**Context**: BUG-001 introduced a slugify algorithm for the namespace fallback chain (course shortname → slug). Explicit overrides on the block (`config_course_id`, `config_namespace`) bypass slugification and are passed to Vektra as-is. This is documented in `n8n/README.md` (Namespace Convention section, added in commit df17369), but the block edit form help strings (`config_course_id_help`, `config_namespace_help` in `lang/en/block_vektra.php` and `lang/it/block_vektra.php`) do not mention this. Teachers who do not read the n8n README may set an override containing characters Vektra rejects (uppercase, spaces, slashes, accented chars) and see silent failure.
+
+**Deferred**: scheduled for Batch C (docs & infra). Not blocking the current n8n workflow PR.
+
+**Acceptance criteria**:
+- [ ] `config_course_id_help` mentions the Vektra namespace charset `[0-9a-zA-Z_-]` constraint and the silent-failure risk
+- [ ] `config_namespace_help` mentions the same constraint
+- [ ] Both English and Italian translations updated
+- [ ] Cross-link to `n8n/README.md` Namespace Convention section
 
 ### TECH-001: Code-quality and documentation polish (CodeRabbit nitpicks)
 
@@ -220,6 +180,18 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 
 **Acceptance criteria**:
 - [ ] All items above addressed (one PR, batched)
+
+### TECH-002: `DELETION_SAFETY_THRESHOLD` in n8n workflow is hardcoded
+
+**Status**: planned | **Priority**: low | **Created**: 2026-04-28
+**Origin**: review of PR `fix/v0.5.0-n8n-workflow` (BUG-009 fix introduced safety net)
+
+**Context**: `Dedup & Diff` in `n8n/workflows/moodle-ingest.json` skips all deletions when Moodle returns an empty file list for a course that has `>= 3` stored files (`DELETION_SAFETY_THRESHOLD = 3`). The threshold guards against transient WS outages causing data loss in Qdrant. The default of 3 is reasonable for typical course sizes but is hardcoded; large courses always benefit from the safety, courses with 1-2 docs bypass it without notice. Operators have no signal when the safety triggers (the workflow returns an empty diff and continues silently).
+
+**Acceptance criteria**:
+- [ ] Threshold sourced from `$env.DELETION_SAFETY_THRESHOLD` with default `3`
+- [ ] Documented in `n8n/README.md` and `n8n/.env.example`
+- [ ] Optional: emit a clear log/summary entry when the safety triggers (operator visibility)
 
 ---
 
@@ -251,4 +223,133 @@ The `:80:80` binding exists for n8n integration (n8n's default also expects `htt
 
 ## Completed
 
-<!-- Move items here when done -->
+### BUG-001: Namespace mismatch between n8n ingestion and plugin
+
+**Status**: completed | **Priority**: high | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #15 (release v0.5.0), comment 3143946475
+
+**Implementation** (commits 89aca9d, df17369 on branch `fix/v0.5.0-n8n-workflow`):
+- Option A adopted: plugin replicates n8n slug algorithm via `\block_vektra\namespace_resolver::slugify()`.
+- Algorithm (PHP and JS, identical): NFD decompose + strip combining marks → lowercase → replace `[^0-9a-z_-]+` with `-` → collapse repeated dashes → trim → truncate to 50.
+- Both fall back to `course-{id}` when the resulting slug is empty.
+- Parity verified with smoke tests against 10 representative inputs (PHP in Moodle container vs Node host) — identical output for valid inputs, identical fallback for empty/CJK/whitespace inputs.
+- Documentation: `n8n/README.md` Namespace Convention section.
+- Override behavior (explicit `course_id` / `namespace` not slugified) tracked separately as BUG-012.
+
+**Context**: The n8n ingestion workflow (`n8n/workflows/moodle-ingest.json`) maps Moodle course shortname to Vektra namespace by **slugifying** it (lowercase + replace spaces with dashes), while the plugin uses the **raw shortname** as the fallback in the namespace resolution chain. Result: any course whose shortname contains spaces or uppercase letters silently fails — the widget queries the raw-name namespace while documents were ingested into the slugified one.
+
+Example: shortname `"Course 101"` → ingest writes to `course-101`, widget queries `Course 101` → empty results.
+
+**Acceptance criteria**:
+- [x] Plugin and n8n agree on the same namespace derivation algorithm
+- [x] Algorithm normalizes the full Vektra-allowed character set: only `[0-9a-zA-Z_-]` survives; `/`, `:`, accented characters, and other non-allowed bytes are mapped to `-` (extended after CodeRabbit comment 3144124468)
+- [x] Documentation (README per-course setup) flags the convention
+- [x] Existing ingested courses continue to work without re-ingestion
+
+### BUG-004: n8n workflow uses `require('http')` only — fails on HTTPS endpoints
+
+**Status**: completed | **Priority**: critical | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: CodeRabbit review on PR #15, comment 3144124469
+
+**Implementation** (commits ad46bb4, 90bbfca on branch `fix/v0.5.0-n8n-workflow`):
+- Both `Handle Deletions` and `Process Single File` now `require('https')` in addition to `http` and select `lib = url.protocol === 'https:' ? https : http` per request.
+- Default port is `url.port || (url.protocol === 'https:' ? 443 : 80)` — explicit port still takes precedence.
+- `n8n/docker-compose.yml`: `NODE_FUNCTION_ALLOW_BUILTIN` extended to include `https`.
+- HTTPS deployment guidance added to `docker/README.md` and `n8n/README.md`.
+
+**Context**: Both `Handle Deletions` and `Process Single File` code nodes in `n8n/workflows/moodle-ingest.json` imported only `const http = require('http')` and defaulted `port: url.port || 80`. Any production deployment with HTTPS Vektra (`https://vektra.example.com`) or HTTPS Moodle would either fail to connect or silently default to port 80 instead of 443. Local HTTP-only dev worked; HTTPS-fronted production was broken.
+
+**Acceptance criteria**:
+- [x] `httpReq` helper imports both `http` and `https`
+- [x] Protocol detected from `URL.protocol`; appropriate module selected
+- [x] Port defaults to 443 for `https:`, 80 for `http:`, with explicit `url.port` taking precedence
+- [x] Change applied in both `Handle Deletions` and `Process Single File` nodes
+- [x] Manual test: triggered against an HTTPS Vektra endpoint during dogfooding
+
+### BUG-008: n8n state-file writes are not atomic
+
+**Status**: completed | **Priority**: low | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: CodeRabbit review on PR #15, comment 3144124472
+
+**Implementation** (commit ad46bb4 on branch `fix/v0.5.0-n8n-workflow`):
+- `writeState` in both `Handle Deletions` and `Process Single File` now performs an atomic write: `writeFileSync(tmp, ...)` to a unique temp path then `renameSync(tmp, STATE_FILE)`.
+- Temp filename: `STATE_FILE + '.' + Date.now() + '.' + Math.random().toString(36).slice(2) + '.tmp'` (`process.pid` is unavailable in the n8n task-runner sandbox; the timestamp-plus-random combination provides sufficient uniqueness for practical purposes).
+
+**Context**: `Process Single File` did `readState()` → mutate → `writeState(state)` with no locking and no temp-file+rename. Safe at default `batchSize=1` with non-overlapping cron ticks, but a long ingestion overlapping the next tick (or anyone bumping `batchSize` for throughput) produced lost-update races on the JSON file.
+
+**Acceptance criteria**:
+- [x] `writeState` uses temp file + atomic rename (`writeFileSync(tmp, ...); renameSync(tmp, STATE_FILE)`)
+- [ ] Optional: simple lockfile around `readState`/`writeState` with retry/backoff (deferred — not needed at current concurrency profile)
+- [ ] Or: switch to a real KV store (deferred — KV migration is a larger refactor, see future tech-debt)
+
+### BUG-009: n8n `_pendingDeletes` static data leaks across runs on partial failure
+
+**Status**: completed | **Priority**: low | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: CodeRabbit review on PR #15, comment 3144124471
+
+**Implementation** (commits cbe96b5, 68303dc on branch `fix/v0.5.0-n8n-workflow`):
+- Option 2 adopted: pipe delete results through the data flow as a sentinel item instead of using `$getWorkflowStaticData('global')`.
+- `Split Files` prepends `{_isDeleteSummary: true, namespace, courseId, deleteResults: [...]}` to the array of file items.
+- `Process Single File` early-returns the sentinel unchanged: `if (file._isDeleteSummary) return [{ json: file }];`
+- `Merge Course Results` extracts the sentinel via `results.find(r => r._isDeleteSummary)` and merges its `deleteResults` into the final summary.
+- Bonus safety nets added in `Dedup & Diff`: propagates `_moodleError` flag from `Extract Files` to skip the diff entirely; aborts mass deletions when Moodle returns an empty file list for a course that has `>= 3` stored files (`DELETION_SAFETY_THRESHOLD`, hardcoded — tracked as TECH-002 for future configurability).
+
+**Context**: `Split Files` used to stash per-namespace delete results in `$getWorkflowStaticData('global')._pendingDeletes[namespace]`; `Merge Course Results` was the only consumer. If anything between the two threw (uncaught process-file exception, workflow cancel, n8n restart), the entry persisted into the next scheduled run and was re-emitted — inflating totals and confusing operators.
+
+**Acceptance criteria**:
+- [ ] Either: key by `namespace + executionId` and reap stale entries on entry
+- [x] Or: pipe `deleteResults` through the data flow instead of static storage
+
+### BUG-011: n8n `JSON.parse` on ingest response fails on non-JSON body
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-27 | **Completed**: 2026-04-28
+**Origin**: Gemini review round-4, comment 3147254494
+
+**Implementation** (commit ad46bb4 on branch `fix/v0.5.0-n8n-workflow`):
+- `JSON.parse(ingestResp.body.toString())` in `Process Single File` is now wrapped in its own `try/catch`. The parsed `body` is declared with `let body;` outside the try so subsequent code can use it.
+- On parse failure: returns a structured failed item with HTTP status code and the first 100 characters of the response body (matches the existing "Download failed" preview length in the same node).
+- Error format: `Vektra returned non-JSON (HTTP <code>): <preview>`
+- The file is marked `status: 'failed'` with `document_id: null` and `chunk_count: 0`.
+
+**Context**: `Process Single File` did `const body = JSON.parse(ingestResp.body.toString())` immediately after the `/api/v1/ingest` HTTP call, with no error handling. If Vektra returned a non-JSON response (502 proxy error, 504 gateway timeout, HTML error page), `JSON.parse` threw `SyntaxError: Unexpected token < in JSON at position 0`. The exception was caught by the outer `try/catch` which marked the file as `status: 'failed'` with the raw exception message — no HTTP status code, no response preview. Operators could not distinguish a Vektra outage from a corrupt document without manually correlating timestamps with proxy logs.
+
+**Acceptance criteria**:
+- [x] Wrap `JSON.parse(ingestResp.body.toString())` in try-catch inside `Process Single File`
+- [x] On parse failure, return a structured failed item with HTTP status code and first 100 chars of response body
+- [x] Error message format: `Vektra returned non-JSON (HTTP <code>): <preview>`
+- [x] File is marked `status: 'failed'` with `document_id: null`
+
+### BUG-013: n8n Handle Deletions drops state even on failed Vektra DELETE
+
+**Status**: completed | **Priority**: high | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #19, comment 3154580989
+
+**Implementation** (commit 0a9f2b0 on branch `fix/v0.5.0-n8n-workflow`):
+- Track per-file outcome via a `deleted` boolean. Set it `true` only when `delResp.statusCode` is in `[200, 300)`.
+- Only execute `delete state.courseFiles[namespace][file.fileurl]` when `deleted === true`. A non-2xx response or a thrown error leaves the file in state so the next cron tick retries.
+- Files without `document_id` (never registered on Vektra) are still dropped from state — there is nothing on Vektra to retry.
+- Non-2xx responses also produce a structured `delete_failed` entry with `HTTP <code>: <preview>` so operators see the actual cause.
+
+**Context**: The `Handle Deletions` node previously cleaned up `state.courseFiles` unconditionally for every iteration in the `toDelete` loop. Since `httpReq` resolves on any HTTP response (including 5xx), a Vektra 500 was silently treated as `'deleted'`, the file was forgotten from state, and Vektra still held the document — permanent state drift between Moodle and Vektra. Only thrown errors (network failures) were caught; HTTP error statuses passed through.
+
+**Acceptance criteria**:
+- [x] `delete state.courseFiles[namespace][file.fileurl]` only runs when the API call returned 2xx
+- [x] Non-2xx responses recorded as `delete_failed` with HTTP code and body preview
+- [x] Files without `document_id` continue to be dropped (nothing to retry)
+
+### BUG-014: n8n Process Single File misses HTTP status checks on Step 1 / Step 2
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #19, comment 3154580999
+
+**Implementation** (commit 0e6715f on branch `fix/v0.5.0-n8n-workflow`):
+- Step 1 (delete old version on `action === 'updated'`): now captures the response and bails on non-2xx with `Old-version delete failed (HTTP <code>): <preview>`. Avoids leaving a duplicate document on Vektra.
+- Step 2 (download from Moodle): added `statusCode` check against `[200, 300)` before the existing `application/json` check. Catches HTML 502/504 from a reverse proxy that the JSON-mimetype check would miss.
+- Error envelopes match the BUG-011 / BUG-013 format (HTTP code + 100-char preview).
+
+**Context**: `Process Single File` had two unchecked HTTP responses. Step 1 ignored its response entirely — a failed old-version delete still proceeded to upload the new file, leaving Vektra with two documents for the same `fileurl`. Step 2 only treated `Content-Type: application/json` as an error signal (Moodle's WS error envelope); a reverse-proxy 502 returning HTML had a different `Content-Type` and would fall through, getting uploaded to Vektra as if it were the user's document.
+
+**Acceptance criteria**:
+- [x] Step 1: bail on non-2xx with structured `Old-version delete failed (HTTP <code>): <preview>`
+- [x] Step 2: bail on non-2xx with structured `Moodle download failed (HTTP <code>): <preview>` before the existing JSON-mimetype check
+- [x] Error format consistent with BUG-011 / BUG-013

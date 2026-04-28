@@ -87,6 +87,16 @@ else
     echo "Moodle already installed, skipping."
 fi
 
+# Inject reverse proxy settings when MOODLE_URL is HTTPS.
+# nginx terminates SSL and forwards plain HTTP to Apache; without these
+# settings Moodle sees HTTP, compares against https:// wwwroot, and loops.
+if [[ "$MOODLE_URL" == https://* ]] && [ -f /var/www/html/config.php ]; then
+    if ! grep -q 'sslproxy' /var/www/html/config.php; then
+        sed -i "s|\(\$CFG->wwwroot.*\)|\1\n\$CFG->reverseproxy = true;\n\$CFG->sslproxy     = true;|" /var/www/html/config.php
+        echo "Reverse proxy settings added to config.php."
+    fi
+fi
+
 # Fix Moodle HTTP security for Docker integration.
 # By default Moodle blocks curl to 172.16.0.0/12 (Docker network range)
 # and only allows ports 443 and 80. We unblock Docker IPs and add port 8000

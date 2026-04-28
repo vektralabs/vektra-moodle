@@ -1,0 +1,86 @@
+# nginx reverse proxy — HTTPS termination for Moodle + Vektra
+#
+# Deploy on the host server:
+#   sudo cp https-reverse-proxy.conf.example /etc/nginx/sites-available/moodle.conf
+#   # edit ssl_certificate paths, server_name, and Vektra port (default 10800)
+#   sudo ln -sf /etc/nginx/sites-available/moodle.conf /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Architecture:
+#   browser → nginx :80  → 301 redirect → https
+#   browser → nginx :443 ┬→ Apache/Moodle (127.0.0.1:MOODLE_PORT, default 10180)
+#                        └→ /vektra/ → vektra-stack (127.0.0.1:10800)
+#
+# nginx owns both public ports (80, 443). Apache is only reachable via loopback
+# on MOODLE_PORT — never directly from outside. No mod_proxy needed in Apache.
+#
+# NOTE: nginx must NOT forward Host: $host to Moodle.
+# Moodle 5 throws "reverseproxyabused" when the Host header matches wwwroot host.
+# Use an internal hostname (e.g. "moodle.internal") to break the match.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com www.example.com;
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name example.com www.example.com;
+
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:MozSSL:10m;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+
+    # Match Moodle's upload_max_filesize (php.ini)
+    client_max_body_size 100M;
+
+    # Vektra API + widget JS — proxied directly to vektra-stack.
+    # Replace 10800 with the host-mapped port from vektra-stack's docker-compose.yml.
+    location /vektra/ {
+        proxy_pass http://127.0.0.1:10800/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+
+        proxy_connect_timeout 10s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
+
+    # Moodle — must use MOODLE_PORT from docker-compose/.env (default 10180).
+    location / {
+        proxy_pass http://127.0.0.1:10180;
+        proxy_http_version 1.1;
+
+        # Internal hostname — must NOT match Moodle's wwwroot host.
+        # Moodle 5 rejects requests where Host == wwwroot host when reverseproxy=true.
+        proxy_set_header Host              "moodle.internal";
+
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  443;
+
+        proxy_connect_timeout 10s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}

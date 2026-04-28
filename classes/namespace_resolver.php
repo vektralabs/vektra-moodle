@@ -70,9 +70,41 @@ class namespace_resolver {
             return $cid;
         }
         $sn = $course?->shortname ?? null;
+        $id = $course?->id ?? null;
         if (is_string($sn) && $sn !== '') {
-            return $sn;
+            $slug = self::slugify($sn);
+            if ($slug !== '') {
+                return $slug;
+            }
         }
-        return '';
+        // Shortname absent or entirely non-alphanumeric after slugification.
+        // Mirrors n8n fallback: course-{id}.
+        return $id !== null ? 'course-' . $id : '';
+    }
+
+    /**
+     * Convert a course shortname to a Vektra-compatible namespace slug.
+     *
+     * Mirrors the algorithm used in the n8n ingestion workflow (Extract Files node)
+     * so that plugin queries and n8n ingestions always address the same namespace.
+     * Steps: NFD decompose + strip combining marks → lowercase →
+     * replace non-[0-9a-z_-] → collapse dashes → trim → truncate to 50.
+     *
+     * Requires the PHP intl extension (a hard Moodle dependency since 4.x).
+     *
+     * @param string $s Raw course shortname.
+     * @return string   Slugified namespace, or '' if all characters were stripped.
+     */
+    private static function slugify(string $s): string {
+        $normalized = \Normalizer::normalize($s, \Normalizer::FORM_D);
+        if ($normalized === false) {
+            return '';
+        }
+        $s = preg_replace('/\p{M}/u', '', $normalized);
+        $s = strtolower($s);
+        $s = preg_replace('/[^0-9a-z_\-]+/', '-', $s);
+        $s = preg_replace('/-{2,}/', '-', $s);
+        $s = trim($s, '-');
+        return substr($s, 0, 50);
     }
 }
