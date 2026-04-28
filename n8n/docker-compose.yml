@@ -16,6 +16,7 @@ services:
       - VEKTRA_API_URL=${VEKTRA_API_URL:-http://vektra-stack-vektra-1:8000}
       - VEKTRA_API_KEY=${VEKTRA_API_KEY}
       - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
+      - DELETION_SAFETY_THRESHOLD=${DELETION_SAFETY_THRESHOLD:-3}
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
