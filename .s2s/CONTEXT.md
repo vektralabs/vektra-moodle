@@ -33,13 +33,15 @@ Moodle block plugin that integrates the Vektra RAG chatbot into course pages. Pa
 - Moodle block plugin for embedding Vektra chatbot in course pages
 - Course enrollment sync with Vektra API (optional enrollment via namespace)
 - Plugin settings (API endpoint, API key, namespace configuration)
+- White-label visual branding (primary color, logo, attribution) — plugin-global, no per-course override
+- Per-course behavioural controls (grounding mode, source citation visibility) saved to the Vektra backend, not Moodle configdata (FEAT-014, v0.5.0)
+- n8n ingestion workflow shipped under `n8n/` for Moodle-to-Vektra automatic syncing (separate Compose stack, optional)
 - Privacy provider implementation (GDPR compliance)
 - Multi-language support (en, it)
 
 **Out of scope**:
 - Admin UI (handled by vektra-admin)
 - Analytics/reporting (handled by vektra-analytics)
-- Content ingestion (handled by vektra-ingest/n8n pipelines)
 - RAG engine logic (handled by vektra-core)
 
 ## Technical Stack
@@ -62,4 +64,4 @@ Moodle block plugin that integrates the Vektra RAG chatbot into course pages. Pa
 - None identified yet
 
 ---
-*Last updated: 2026-04-25*
+*Last updated: 2026-04-28*

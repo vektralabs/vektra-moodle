@@ -66,9 +66,9 @@ $string['settings_powered_by_url_desc'] = 'Optional URL the attribution text lin
 // Instance settings.
 $string['config_title'] = 'Block title';
 $string['config_course_id'] = 'Vektra course ID';
-$string['config_course_id_help'] = 'The course identifier in Vektra. Leave empty to use the Moodle course short name. Must match the course_id used when ingesting materials into Vektra.';
+$string['config_course_id_help'] = 'The course identifier in Vektra. Leave empty to use the Moodle course short name (which is automatically slugified to match the n8n ingestion algorithm). When set explicitly, this value is sent to Vektra as-is and must match the Vektra namespace charset [0-9a-zA-Z_-]; otherwise queries silently return no results. See n8n/README.md "Namespace Convention" for the slug algorithm.';
 $string['config_namespace'] = 'Vektra namespace';
-$string['config_namespace_help'] = 'Override the namespace included in the JWT token (max 64 characters). Leave empty to let the API default to the course ID. Useful when multiple courses share the same materials or when the Moodle short name contains characters not valid as a namespace.';
+$string['config_namespace_help'] = 'Override the namespace included in the JWT token (max 64 characters). Leave empty to let the chain default to the course_id (or the slugified course short name). When set explicitly, this value is sent to Vektra as-is and must match the Vektra namespace charset [0-9a-zA-Z_-]; otherwise queries silently return no results.';
 $string['config_theme'] = 'Theme';
 $string['config_language'] = 'Language';
 $string['config_language_help'] = 'Override the widget language (e.g., "en", "it"). Leave empty to use the current Moodle language.';

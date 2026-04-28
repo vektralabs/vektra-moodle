@@ -66,7 +66,7 @@ the GitHub release with auto-generated notes.
 
 Before opening a PR:
 
-- [ ] PHP syntax check passes (`find . -name '*.php' | xargs -n1 php -l`)
+- [ ] PHP syntax check passes (`find . -name '*.php' -print0 | xargs -0 -n1 php -l`)
 - [ ] Moodle Code Style passes (CI runs `phpcs --standard=moodle` on every
       PR)
 - [ ] New behavior has been manually verified on Moodle 5.1

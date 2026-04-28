@@ -4,7 +4,7 @@ Automated pipeline that syncs Moodle course materials (PDF, DOCX, PPTX, Markdown
 
 ## How It Works
 
-```
+```text
 Moodle (LMS)
   |  polling via Web Services REST API
   v
@@ -69,6 +69,14 @@ curl -X POST http://localhost:8000/api/v1/api-keys \
 
 Save the `key` from the response (shown only once). The `admin` scope is needed for document deletion.
 
+> **Security warning**: the `admin` scope grants the full admin surface — managing API keys, namespaces, and admin endpoints — far more than the `DELETE /api/v1/documents/batch` call this workflow needs. Treat this key like a root credential:
+>
+> - store it only in `n8n/.env` (never commit; the file is gitignored)
+> - rotate it on personnel changes or suspected leak (delete + recreate)
+> - if the Vektra backend ever ships a narrower delete-only scope, switch to two keys: ingest-only for uploads + the narrower scope for deletions
+>
+> Tracked as BUG-010 in `.s2s/BACKLOG.md`.
+
 ### Step 4: Configure Environment
 
 ```bash
@@ -81,11 +89,14 @@ Edit `.env` with your values:
 |----------|-------------|
 | `N8N_PORT` | n8n UI port (default: 5678) |
 | `N8N_ENCRYPTION_KEY` | Random string for n8n credential encryption |
-| `MOODLE_URL` | Moodle base URL (must match `$CFG->wwwroot`, default: `http://vektra-moodle`) |
+| `MOODLE_URL` | Moodle base URL (must match `$CFG->wwwroot`, default: `http://vektra-moodle`). With the n8n stack the Moodle compose file's `MOODLE_URL` must also be set to `http://vektra-moodle` (see [Hosts file configuration](#hosts-file-configuration)) |
 | `MOODLE_WS_TOKEN` | Token from Step 2 |
 | `VEKTRA_API_URL` | Vektra API URL (Docker: `http://vektra-stack-vektra-1:8000`, host: `http://localhost:8000`) |
 | `VEKTRA_API_KEY` | API key from Step 3 |
-| `INGEST_CRON` | Cron expression (default: `*/5 * * * *`) |
+| `INGEST_CRON` | Cron expression (default: `"*/5 * * * *"` — quote to keep dotenv parsers from splitting on whitespace) |
+| `DELETION_SAFETY_THRESHOLD` | Skip mass deletions when Moodle returns an empty file list for a course that previously had >= N stored documents (default 3, set to 0 to disable) |
+| `VEKTRA_STACK_NETWORK` | Override the external Docker network name for vektra-stack (default `vektra-stack_default`) |
+| `MOODLE_NETWORK` | Override the external Docker network name for vektra-moodle (default `docker_default`) |
 
 ### Step 5: Start n8n
 
@@ -99,8 +110,8 @@ and vektra-moodle are running first, otherwise startup will fail.
 
 > **Note**: If your `vektra-stack` or `vektra-moodle` compose files use project
 > names that produce different network names (e.g. due to a non-default
-> directory layout), adjust the `external` network names in
-> `n8n/docker-compose.yml`. Check with `docker network ls`.
+> directory layout), set `VEKTRA_STACK_NETWORK` and/or `MOODLE_NETWORK` in
+> `n8n/.env` to match. Check with `docker network ls`.
 
 ### Step 6: Import Workflow
 
@@ -120,11 +131,16 @@ and vektra-moodle are running first, otherwise startup will fail.
 > **Upgrading from n8n 1.x**: if you previously activated this workflow on
 > n8n 1.x and upgraded the container to 2.x, the schedule trigger will not
 > fire until the workflow is explicitly published under the new state model.
-> Run once and restart the container:
-> ```bash
-> docker compose exec n8n n8n publish:workflow --id=<workflow-id>
-> docker compose restart n8n
-> ```
+> n8n 2.x removed the `n8n publish:workflow` CLI subcommand; use one of:
+>
+> - **UI** (simplest): open the workflow in the n8n editor and click **Publish**.
+> - **REST API** (programmatic):
+>   ```bash
+>   curl --request="PATCH" "http://localhost:5678/api/v1/workflows/<workflow-id>/activate" \
+>     --header="X-N8N-API-KEY: <your-n8n-api-key>"
+>   ```
+>   The API key is created under **Settings > n8n API > Create an API key** in the n8n UI.
+>
 > Fresh installs importing the JSON via the UI are not affected.
 
 ## Testing
@@ -160,11 +176,11 @@ The hostname `vektra-moodle` is the Docker container name. n8n reaches it via Do
 
 Add this line:
 
-```
+```text
 127.0.0.1 vektra-moodle
 ```
 
-The Moodle container maps port 80 to the host (`127.0.0.1:80:80` in docker-compose), so `http://vektra-moodle` resolves to the local Moodle instance from both Docker and the browser.
+The Moodle container is bound to the host as `127.0.0.1:${MOODLE_PORT:-10180}:80` (default port `10180`). For the browser to resolve `http://vektra-moodle` to that bound port, also add `MOODLE_PORT=80` to `docker/.env` (or use a per-host hostname trick) — alternatively, browse Moodle via `http://localhost:10180` and reserve `vektra-moodle` for n8n's container-to-container traffic. n8n inside Docker uses the container DNS (port 80) regardless of the host binding.
 
 ## Configuration
 
@@ -232,7 +248,7 @@ The workflow derives the Vektra namespace from the Moodle course shortname by ap
 
 ### 409 Conflict on ingest
 
-A file with the same name but different content already exists in the namespace. The workflow prefixes filenames with the Moodle module ID (`mod123_filename.pdf`) to avoid this. If it still occurs, clear the workflow static data (Settings > Static Data > Clear) and re-run.
+A file with the same name but different content already exists in the namespace. The workflow prefixes filenames with the Moodle module ID (`mod123_filename.pdf`) to avoid this. If it still occurs, the workflow's view of what is already ingested has likely drifted from Vektra; reset the JSON state file at `STATE_FILE_PATH` (default `/home/node/.n8n/moodle-ingest-state.json`) and re-run — see [Force re-processing of all files](#force-re-processing-of-all-files) below.
 
 ### Force re-processing of all files
 
@@ -257,7 +273,7 @@ Follow the same steps, adjusting URLs to match your production environment:
 
 If Moodle is served over HTTPS (see `docker/README.md` — HTTPS deployment), set `MOODLE_URL` to the full HTTPS URL matching `$CFG->wwwroot`:
 
-```
+```env
 MOODLE_URL=https://your-moodle.example.com
 ```
 
