@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-04-28 (Batch C round-1 review fixes)
+**Updated**: 2026-04-28 (Batch D — PR #15 post-Batch-C review)
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -58,33 +58,6 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 - [ ] `data-token-refresh-url` added to widget script tag
 - [ ] Token refresh transparent to user (no reload)
 - [ ] Refresh error handled by widget (localized message)
-
-### BUG-002: `!empty()` resolution treats `'0'` as empty in namespace/course_id chain
-
-**Status**: planned | **Priority**: medium | **Created**: 2026-04-26
-**Origin**: Gemini review on PR #15, comments 3143946476 + 3143946478
-
-**Context**: `block_vektra::instance_config_save` and `block_vektra::get_content` use `!empty($data->namespace)` / `!empty($data->course_id)` to resolve the effective values. Since these fields are typed `PARAM_ALPHANUMEXT`, the literal string `'0'` is a valid value but `!empty('0')` returns `false`, causing an unintended fallback to the next level in the chain. The namespace lookup in `get_content` already uses the correct `is_string($ns) && $ns !== ''` pattern; only the other sites need to be aligned.
-
-**Affected lines**:
-- `block_vektra.php:148-154` (instance_config_save namespace chain)
-- `block_vektra.php:213-214` (get_content course_id resolution)
-- `edit_form.php:251-260` (resolve_namespace — same pattern)
-
-**Acceptance criteria**:
-- [ ] All three namespace/course_id resolution sites use `is_string($x) && $x !== ''` (matching the pattern already used in `get_content` for `namespace`)
-- [ ] Manual test: setting `course_id` to `'0'` resolves to `'0'`, not to shortname
-
-### BUG-003: Missing maxlength validation on welcome_message form field
-
-**Status**: planned | **Priority**: low | **Created**: 2026-04-26
-**Origin**: Gemini review on PR #15, comment 3143946480 — gap from plan Phase C5
-
-**Context**: The implementation plan (Phase C5) called for `config_welcome_message` to enforce `maxlength=500` via `addRule` (client-side message + server-side reject). The current implementation only declares `PARAM_TEXT`, which protects DB storage but allows arbitrarily long input through the form with no UX feedback. No security or overflow risk in `mdl_block_instances.configdata`; this is a UX/validation gap.
-
-**Acceptance criteria**:
-- [ ] `addRule('config_welcome_message', maximumchars(500), 'maxlength', 500)` in `edit_form.php::specific_definition`
-- [ ] Optional: `validation()` method to trim + reject > 500 server-side
 
 ---
 
@@ -401,3 +374,49 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - [x] `Ingestion Summary` reports the preserved count (not `0`)
 - [x] No regression on normal flows (verified across 5 scenarios)
 
+### BUG-002: `!empty()` resolution treats `'0'` as empty in namespace/course_id chain
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #15, comments 3143946476 + 3143946478
+
+**Implementation** (PR #18 merged 2026-04-26 — commits 165dab0, eaa5406):
+- Created `\block_vektra\namespace_resolver` static helper class with `resolve()` and `resolve_course_id()` methods using the `is_string($x) && $x !== ''` pattern.
+- Refactored `block_vektra::instance_config_save`, `block_vektra::get_content`, and `edit_form_block_vektra::resolve_namespace` to delegate to the shared resolver — no more drift across the three sites.
+- Manual test: setting `course_id` to `'0'` now resolves to `'0'`, not to the shortname.
+
+**Context**: `block_vektra::instance_config_save` and `block_vektra::get_content` previously used `!empty($data->namespace)` / `!empty($data->course_id)` to resolve effective values. Since these fields are typed `PARAM_ALPHANUMEXT`, the literal string `'0'` is valid but `!empty('0')` returns `false`, causing unintended fallback to the next chain level. The fix replaces the pattern with `is_string($x) && $x !== ''` everywhere, centralised in `namespace_resolver`.
+
+**Acceptance criteria**:
+- [x] All three namespace/course_id resolution sites use `is_string($x) && $x !== ''`
+- [x] Manual test: `course_id = '0'` resolves to `'0'`, not to shortname
+
+### BUG-003: Missing maxlength validation on welcome_message form field
+
+**Status**: completed | **Priority**: low | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #15, comment 3143946480
+
+**Implementation** (PR #18 merged 2026-04-26):
+- `edit_form.php::specific_definition` now calls `addRule('config_welcome_message', get_string('maximumchars', '', 500), 'maxlength', 500, 'client')`.
+- An inline doc comment clarifies that the `'client'` flag in HTML_QuickForm means "client + server" — server-side validation runs unconditionally per `lib/pear/HTML/QuickForm.php::validate()`. The flag only controls JS generation. (Was a Gemini false-positive in PR #18 review; documented to prevent re-flagging.)
+
+**Context**: The implementation plan called for `config_welcome_message` to enforce `maxlength=500` via `addRule`. The pre-PR-#18 implementation only declared `PARAM_TEXT`, which protected DB storage but allowed arbitrarily long input through the form with no UX feedback. The fix adds the rule for both client-side message and server-side reject.
+
+**Acceptance criteria**:
+- [x] `addRule('config_welcome_message', maximumchars(500), 'maxlength', 500)` in `edit_form.php::specific_definition`
+
+### BUG-017: n8n `_moodleError` not propagated to Ingestion Summary
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: CodeRabbit review on PR #15, comment 3156051934 (post-Batch C round)
+
+**Implementation** (commit 73d5fbb on branch `fix/v0.5.0-batch-d`):
+- `No Changes` node now detects `input._moodleError` and emits a single courseResult with `action: 'sync', status: 'failed'` and the `errorDetail` preview (200 chars).
+- Ingestion Summary increments `totalFailed` and adds the entry to the details list with the underlying Moodle error message, so operators see the cause without reading execution logs.
+- Verified end-to-end across 5 scenarios: _moodleError, normal no-changes, safety-net (BUG-016 still works), deletes-only (BUG-013/014 intact), edge case with stale data alongside _moodleError.
+
+**Context**: The `_moodleError` flag introduced in PR #19 prevented Dedup & Diff from treating a malformed Moodle response as a deletion trigger, but the propagation stopped there: Dedup & Diff returned empty arrays, the data flowed through `Has Deletions? -> Has Ingestions? -> No Changes` (which only iterated `input.unchanged`, also empty), and Ingestion Summary received zero items for that course. Net effect: a Moodle WS failure was reported as `0 new / 0 updated / 0 removed / 0 unchanged / 0 failed` — completely invisible.
+
+**Acceptance criteria**:
+- [x] `No Changes` detects `_moodleError` and emits a structured failed item
+- [x] Ingestion Summary counts the entry as `failed`
+- [x] No regression on normal / safety-net / deletes-only flows
