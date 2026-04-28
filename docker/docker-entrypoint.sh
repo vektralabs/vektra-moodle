@@ -90,10 +90,20 @@ fi
 # Inject reverse proxy settings when MOODLE_URL is HTTPS.
 # nginx terminates SSL and forwards plain HTTP to Apache; without these
 # settings Moodle sees HTTP, compares against https:// wwwroot, and loops.
+# Each setting is checked independently so a partial config (only one
+# of the two present) is repaired rather than skipped.
 if [[ "$MOODLE_URL" == https://* ]] && [ -f /var/www/html/config.php ]; then
-    if ! grep -q 'sslproxy' /var/www/html/config.php; then
-        sed -i "s|\(\$CFG->wwwroot.*\)|\1\n\$CFG->reverseproxy = true;\n\$CFG->sslproxy     = true;|" /var/www/html/config.php
-        echo "Reverse proxy settings added to config.php."
+    INJECTED=0
+    if ! grep -Eq '^\s*\$CFG->reverseproxy\s*=' /var/www/html/config.php; then
+        sed -i "/^\$CFG->wwwroot/a \$CFG->reverseproxy = true;" /var/www/html/config.php
+        INJECTED=1
+    fi
+    if ! grep -Eq '^\s*\$CFG->sslproxy\s*=' /var/www/html/config.php; then
+        sed -i "/^\$CFG->wwwroot/a \$CFG->sslproxy     = true;" /var/www/html/config.php
+        INJECTED=1
+    fi
+    if [ "$INJECTED" -eq 1 ]; then
+        echo "Reverse proxy settings ensured in config.php."
     fi
 fi
 
