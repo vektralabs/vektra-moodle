@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-04-28
+**Updated**: 2026-04-28 (PR #19 review round)
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -318,3 +318,38 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - [x] On parse failure, return a structured failed item with HTTP status code and first 100 chars of response body
 - [x] Error message format: `Vektra returned non-JSON (HTTP <code>): <preview>`
 - [x] File is marked `status: 'failed'` with `document_id: null`
+
+### BUG-013: n8n Handle Deletions drops state even on failed Vektra DELETE
+
+**Status**: completed | **Priority**: high | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #19, comment 3154580989
+
+**Implementation** (commit 0a9f2b0 on branch `fix/v0.5.0-n8n-workflow`):
+- Track per-file outcome via a `deleted` boolean. Set it `true` only when `delResp.statusCode` is in `[200, 300)`.
+- Only execute `delete state.courseFiles[namespace][file.fileurl]` when `deleted === true`. A non-2xx response or a thrown error leaves the file in state so the next cron tick retries.
+- Files without `document_id` (never registered on Vektra) are still dropped from state — there is nothing on Vektra to retry.
+- Non-2xx responses also produce a structured `delete_failed` entry with `HTTP <code>: <preview>` so operators see the actual cause.
+
+**Context**: The `Handle Deletions` node previously cleaned up `state.courseFiles` unconditionally for every iteration in the `toDelete` loop. Since `httpReq` resolves on any HTTP response (including 5xx), a Vektra 500 was silently treated as `'deleted'`, the file was forgotten from state, and Vektra still held the document — permanent state drift between Moodle and Vektra. Only thrown errors (network failures) were caught; HTTP error statuses passed through.
+
+**Acceptance criteria**:
+- [x] `delete state.courseFiles[namespace][file.fileurl]` only runs when the API call returned 2xx
+- [x] Non-2xx responses recorded as `delete_failed` with HTTP code and body preview
+- [x] Files without `document_id` continue to be dropped (nothing to retry)
+
+### BUG-014: n8n Process Single File misses HTTP status checks on Step 1 / Step 2
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-04-28 | **Completed**: 2026-04-28
+**Origin**: Gemini review on PR #19, comment 3154580999
+
+**Implementation** (commit 0e6715f on branch `fix/v0.5.0-n8n-workflow`):
+- Step 1 (delete old version on `action === 'updated'`): now captures the response and bails on non-2xx with `Old-version delete failed (HTTP <code>): <preview>`. Avoids leaving a duplicate document on Vektra.
+- Step 2 (download from Moodle): added `statusCode` check against `[200, 300)` before the existing `application/json` check. Catches HTML 502/504 from a reverse proxy that the JSON-mimetype check would miss.
+- Error envelopes match the BUG-011 / BUG-013 format (HTTP code + 100-char preview).
+
+**Context**: `Process Single File` had two unchecked HTTP responses. Step 1 ignored its response entirely — a failed old-version delete still proceeded to upload the new file, leaving Vektra with two documents for the same `fileurl`. Step 2 only treated `Content-Type: application/json` as an error signal (Moodle's WS error envelope); a reverse-proxy 502 returning HTML had a different `Content-Type` and would fall through, getting uploaded to Vektra as if it were the user's document.
+
+**Acceptance criteria**:
+- [x] Step 1: bail on non-2xx with structured `Old-version delete failed (HTTP <code>): <preview>`
+- [x] Step 2: bail on non-2xx with structured `Moodle download failed (HTTP <code>): <preview>` before the existing JSON-mimetype check
+- [x] Error format consistent with BUG-011 / BUG-013
