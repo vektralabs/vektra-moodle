@@ -24,7 +24,13 @@ services:
     ports:
       - "127.0.0.1:${MOODLE_PORT:-10180}:80"
     environment:
-      MOODLE_URL: "http://localhost:${MOODLE_PORT:-10180}"
+      # Solo-dev default points at the loopback host port so a fresh
+      # `docker compose up` is browser-reachable without /etc/hosts edits.
+      # When using the n8n ingestion stack, override with
+      # MOODLE_URL=http://vektra-moodle in `.env` and add
+      # `127.0.0.1 vektra-moodle` to /etc/hosts so n8n (inside Docker)
+      # and the browser (on the host) resolve to the same name.
+      MOODLE_URL: "${MOODLE_URL:-http://localhost:${MOODLE_PORT:-10180}}"
       DB_HOST: mariadb
       DB_NAME: ${DB_NAME:-moodle}
       DB_USER: ${DB_USER:-moodleuser}

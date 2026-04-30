@@ -1,0 +1,40 @@
+services:
+  n8n:
+    image: n8nio/n8n:2.17.2
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs,http,https,url
+      - NODE_FUNCTION_ALLOW_EXTERNAL=
+      - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Rome}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_RUNNERS_TASK_TIMEOUT=900
+      - MOODLE_URL=${MOODLE_URL:-http://vektra-moodle}
+      - MOODLE_WS_TOKEN=${MOODLE_WS_TOKEN}
+      - VEKTRA_API_URL=${VEKTRA_API_URL:-http://vektra-stack-vektra-1:8000}
+      - VEKTRA_API_KEY=${VEKTRA_API_KEY}
+      - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
+      - DELETION_SAFETY_THRESHOLD=${DELETION_SAFETY_THRESHOLD:-3}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - vektra_stack
+      - moodle
+
+volumes:
+  n8n_data:
+
+networks:
+  default:
+    name: n8n_default
+  vektra_stack:
+    name: ${VEKTRA_STACK_NETWORK:-vektra-stack_default}
+    external: true
+  moodle:
+    name: ${MOODLE_NETWORK:-docker_default}
+    external: true

@@ -70,6 +70,98 @@ class block_vektra extends block_base {
     public function specialization() {
         if (!empty($this->config?->title)) {
             $this->title = $this->config->title;
+        } else {
+            // Fall back to a localized course-aware default when no override is set.
+            $coursename = $this->page->course->fullname ?? '';
+            $this->title = get_string('default_title', 'block_vektra', $coursename);
+        }
+    }
+
+    /**
+     * Persist instance config and best-effort PATCH the Vektra namespace config.
+     *
+     * The local configdata is always saved via the parent. Behavioral fields
+     * (grounding_mode, show_sources) are not stored locally — they are pushed
+     * to the Vektra backend, which is the single source of truth. PATCH errors
+     * are surfaced as warnings but do not abort the save.
+     *
+     * @param object $data Submitted form data with config_ prefix already stripped.
+     * @param bool $nolongerused Unused parameter kept for parent signature compatibility.
+     */
+    public function instance_config_save($data, $nolongerused = false) {
+        // Capture transient and backend-only fields, then strip them from $data so
+        // the parent does not serialize them into configdata. Behavioral fields live
+        // on the Vektra backend; the form-open marker is per-request only.
+        $getok       = (int) ($data->get_ok ?? 0);
+        $grounding   = $data->grounding_mode ?? 'inherit';
+        $showsources = $data->show_sources_choice ?? 'inherit';
+        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice);
+
+        // Always persist configdata first so the form save itself never fails.
+        parent::instance_config_save($data, $nolongerused);
+
+        // If the form-open GET did not succeed, the teacher could not see the real
+        // backend state, so the values they submitted for the behavioral selects are
+        // not trustworthy. Skip the PATCH entirely to avoid silently clobbering
+        // existing namespace overrides.
+        if ($getok !== 1) {
+            \core\notification::info(
+                get_string('save_info_behavioral_skipped', 'block_vektra')
+            );
+            return;
+        }
+
+        $payload = [];
+
+        if ($grounding === 'inherit') {
+            $payload['grounding_mode'] = null;
+        } else if (in_array($grounding, ['strict', 'hybrid'], true)) {
+            $payload['grounding_mode'] = $grounding;
+        }
+
+        if ($showsources === 'inherit') {
+            $payload['show_sources'] = null;
+        } else if ($showsources === 'yes') {
+            $payload['show_sources'] = true;
+        } else if ($showsources === 'no') {
+            $payload['show_sources'] = false;
+        }
+
+        if (empty($payload)) {
+            return;
+        }
+
+        $apiurl = get_config('block_vektra', 'apiurl');
+        $apikey = get_config('block_vektra', 'apikey');
+        if (empty($apiurl) || empty($apikey)) {
+            \core\notification::warning(
+                get_string('save_warning_not_configured', 'block_vektra')
+            );
+            return;
+        }
+
+        // Resolve namespace via the shared chain (explicit override > course_id
+        // override > course shortname) so admin GET/PATCH targets the same
+        // identifier the backend uses on the JWT path.
+        $namespace = \block_vektra\namespace_resolver::resolve($data, $this->page->course);
+        if ($namespace === '') {
+            \core\notification::warning(
+                get_string('save_warning_no_namespace', 'block_vektra')
+            );
+            return;
+        }
+
+        $client = new \block_vektra\vektra_client($apiurl, $apikey);
+        $result = $client->patch_namespace_config($namespace, $payload);
+
+        if (empty($result['ok'])) {
+            $a = (object) [
+                'message' => $result['message'] ?? '',
+                'code'    => $result['error_code'] ?? '',
+            ];
+            \core\notification::warning(
+                get_string('save_warning_patch_failed', 'block_vektra', $a)
+            );
         }
     }
 
@@ -81,7 +173,7 @@ class block_vektra extends block_base {
      * chat button in the bottom-right corner.
      */
     public function get_content() {
-        global $USER, $COURSE;
+        global $USER;
 
         if ($this->content !== null) {
             return $this->content;
@@ -106,13 +198,13 @@ class block_vektra extends block_base {
             return $this->content;
         }
 
-        // Determine course_id: use per-instance override or Moodle shortname.
-        $courseid = !empty($this->config?->course_id)
-            ? $this->config->course_id
-            : $COURSE->shortname;
+        $course = $this->page->course;
 
-        // Determine namespace: explicit config, or null to let the API default to course_id.
-        // Note: !empty() treats '0' as empty, but '0' is valid for PARAM_ALPHANUMEXT.
+        // Determine course_id via the shared resolver (override > shortname; '0'-safe).
+        $courseid = \block_vektra\namespace_resolver::resolve_course_id($this->config, $course);
+
+        // Determine namespace: explicit config only, or null to let the API
+        // default to course_id on the JWT path.
         $ns = $this->config?->namespace;
         $namespace = (is_string($ns) && $ns !== '') ? $ns : null;
 
@@ -147,9 +239,14 @@ class block_vektra extends block_base {
         // Build token refresh URL with sesskey for CSRF protection.
         $refreshurl = new \moodle_url('/blocks/vektra/ajax.php', [
             'id'       => $this->instance->id,
-            'courseid' => $COURSE->id,
+            'courseid' => $course->id,
             'sesskey'  => sesskey(),
         ]);
+
+        // Title: reuse $this->title set by specialization() (instance override
+        // when non-empty, otherwise the course-aware localized default). Avoids
+        // recomputing the same value here.
+        $widgettitle = (string) $this->title;
 
         $attributes = [
             'src'                    => $widgeturl,
@@ -157,12 +254,38 @@ class block_vektra extends block_base {
             'data-course-id'         => $courseid,
             'data-token'             => $token,
             'data-token-refresh-url' => $refreshurl->out(false),
+            'data-title'             => $widgettitle,
         ];
         if (!empty($theme)) {
             $attributes['data-theme'] = $theme;
         }
         if (!empty($language)) {
             $attributes['data-language'] = $language;
+        }
+
+        // Plugin-global visual brand (no per-course override by design).
+        $primarycolor = get_config('block_vektra', 'default_primary_color');
+        if (!empty($primarycolor)) {
+            $attributes['data-primary-color'] = $primarycolor;
+        }
+        $logourl = get_config('block_vektra', 'default_logo_url');
+        if (!empty($logourl)) {
+            $attributes['data-icon'] = $logourl;
+        }
+
+        // Per-instance welcome message (no admin default).
+        if (!empty($this->config?->welcome_message)) {
+            $attributes['data-welcome-message'] = (string) $this->config->welcome_message;
+        }
+
+        // Plugin-global attribution (visible by default; emit only when configured).
+        $poweredbytext = get_config('block_vektra', 'powered_by_text');
+        if (!empty($poweredbytext)) {
+            $attributes['data-powered-by-text'] = $poweredbytext;
+        }
+        $poweredbyurl = get_config('block_vektra', 'powered_by_url');
+        if (!empty($poweredbyurl)) {
+            $attributes['data-powered-by-url'] = $poweredbyurl;
         }
 
         // Inject widget via js_init_code. Use json_encode for safe JS escaping.
