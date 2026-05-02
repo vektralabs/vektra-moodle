@@ -125,5 +125,33 @@ if [ -f /var/www/html/config.php ]; then
     " 2>/dev/null && echo "HTTP security configured for Docker integration." || true
 fi
 
+# Ensure n8n WS token exists in Moodle DB.
+# The token must match MOODLE_WS_TOKEN in the n8n stack .env.
+# tokentype=0 (EXTERNAL_TOKEN_PERMANENT) is required — omitting it causes insert failure.
+if [ -n "${N8N_WS_TOKEN:-}" ] && [ -f /var/www/html/config.php ]; then
+    php -r "
+        define('CLI_SCRIPT', true);
+        require('/var/www/html/config.php');
+        \$token_value = getenv('N8N_WS_TOKEN');
+        \$service = \$DB->get_record('external_services', ['shortname' => 'n8n_ingestion']);
+        if (!\$service) { echo \"n8n_ingestion WS service not found, skipping token setup.\n\"; exit(0); }
+        \$admin = \$DB->get_record('user', ['username' => getenv('ADMIN_USER') ?: 'admin']);
+        if (!\$admin) { echo \"Admin user not found, skipping token setup.\n\"; exit(0); }
+        \$existing = \$DB->get_record('external_tokens', ['token' => \$token_value, 'externalserviceid' => \$service->id]);
+        if (\$existing) { echo \"n8n WS token already present.\n\"; exit(0); }
+        \$r = new stdClass();
+        \$r->token              = \$token_value;
+        \$r->tokentype          = 0;
+        \$r->userid             = \$admin->id;
+        \$r->externalserviceid  = \$service->id;
+        \$r->contextid          = context_system::instance()->id;
+        \$r->creatorid          = \$admin->id;
+        \$r->timecreated        = time();
+        \$r->validuntil         = 0;
+        \$DB->insert_record('external_tokens', \$r);
+        echo \"n8n WS token created.\n\";
+    " 2>/dev/null && true || echo "WARNING: n8n WS token setup failed (non-fatal)."
+fi
+
 echo "Starting Apache..."
 exec "$@"

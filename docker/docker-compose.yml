@@ -38,6 +38,7 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS: ${ADMIN_PASS:-Admin123!}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      N8N_WS_TOKEN: "${N8N_WS_TOKEN:-}"
     volumes:
       - moodle_data:/var/moodledata
       - ./php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
