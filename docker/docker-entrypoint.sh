@@ -137,20 +137,41 @@ if [ -n "${N8N_WS_TOKEN:-}" ] && [ -f /var/www/html/config.php ]; then
         if (!\$service) { echo \"n8n_ingestion WS service not found, skipping token setup.\n\"; exit(0); }
         \$admin = \$DB->get_record('user', ['username' => getenv('ADMIN_USER') ?: 'admin']);
         if (!\$admin) { echo \"Admin user not found, skipping token setup.\n\"; exit(0); }
-        \$existing = \$DB->get_record('external_tokens', ['token' => \$token_value, 'externalserviceid' => \$service->id]);
-        if (\$existing) { echo \"n8n WS token already present.\n\"; exit(0); }
-        \$r = new stdClass();
-        \$r->token              = \$token_value;
-        \$r->tokentype          = 0;
-        \$r->userid             = \$admin->id;
-        \$r->externalserviceid  = \$service->id;
-        \$r->contextid          = context_system::instance()->id;
-        \$r->creatorid          = \$admin->id;
-        \$r->timecreated        = time();
-        \$r->validuntil         = 0;
-        \$DB->insert_record('external_tokens', \$r);
-        echo \"n8n WS token created.\n\";
-    " 2>/dev/null && true || echo "WARNING: n8n WS token setup failed (non-fatal)."
+        // Use get_records (plural) to recover from pre-existing duplicates left by an
+        // earlier buggy version of this script (lookup keyed on token value would insert
+        // a new row on every rotation). Keep oldest, delete the rest.
+        \$rows = \$DB->get_records('external_tokens', ['externalserviceid' => \$service->id, 'userid' => \$admin->id, 'tokentype' => 0], 'timecreated ASC, id ASC');
+        \$existing = false;
+        if (count(\$rows) > 0) {
+            \$existing = array_shift(\$rows);
+            if (count(\$rows) > 0) {
+                \$dup_count = count(\$rows);
+                foreach (\$rows as \$dup) { \$DB->delete_records('external_tokens', ['id' => \$dup->id]); }
+                echo \"n8n WS token: removed \" . \$dup_count . \" duplicate(s).\n\";
+            }
+        }
+        if (\$existing) {
+            if (\$existing->token !== \$token_value) {
+                \$existing->token = \$token_value;
+                \$DB->update_record('external_tokens', \$existing);
+                echo \"n8n WS token updated.\n\";
+            } else {
+                echo \"n8n WS token already present and matches.\n\";
+            }
+        } else {
+            \$r = new stdClass();
+            \$r->token              = \$token_value;
+            \$r->tokentype          = 0;
+            \$r->userid             = \$admin->id;
+            \$r->externalserviceid  = \$service->id;
+            \$r->contextid          = context_system::instance()->id;
+            \$r->creatorid          = \$admin->id;
+            \$r->timecreated        = time();
+            \$r->validuntil         = 0;
+            \$DB->insert_record('external_tokens', \$r);
+            echo \"n8n WS token created.\n\";
+        }
+    " || echo "WARNING: n8n WS token setup failed (non-fatal)."
 fi
 
 echo "Starting Apache..."
