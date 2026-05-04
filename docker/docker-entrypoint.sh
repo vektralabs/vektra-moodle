@@ -128,6 +128,13 @@ fi
 # Ensure n8n WS token exists in Moodle DB.
 # The token must match MOODLE_WS_TOKEN in the n8n stack .env.
 # tokentype=0 (EXTERNAL_TOKEN_PERMANENT) is required — omitting it causes insert failure.
+#
+# N8N_WS_TOKEN is a provisioning input, not the source of truth for token existence.
+# Unsetting it is a no-op: any pre-existing token row stays active. To revoke, delete
+# the token via Moodle admin UI (Site administration → Server → Web services → Manage
+# tokens) or disable the n8n_ingestion external service. Auto-revoke on empty env was
+# considered and rejected: an accidental deploy without the env (missing .env, unset
+# variable) would silently destroy a working production credential.
 if [ -n "${N8N_WS_TOKEN:-}" ] && [ -f /var/www/html/config.php ]; then
     php -r "
         define('CLI_SCRIPT', true);
