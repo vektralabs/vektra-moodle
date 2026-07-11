@@ -20,25 +20,19 @@
 
 ## Planned
 
-### FEAT-001: Show diagnostic error when Vektra API connection fails
+### FEAT-003: Per-course inline citations control (depends on vektra-stack FEAT-021)
 
-**Status**: planned | **Priority**: high | **Created**: 2026-03-22
-**Origin**: silent widget failure during API key reset on Kalypso
+**Status**: planned | **Priority**: low | **Created**: 2026-07-11
+**Origin**: v0.6.0 planning, versioning alignment check against the vektra-stack backlog
 
-**Context**: When the plugin cannot generate a JWT token (API key invalid, Vektra unreachable, 401/timeout), the block silently shows nothing - no widget button, no error message. Admins see "AI Assistant is active" but students see a blank block. The root cause (invalid API key, network issue, container down) is invisible without checking Moodle/Vektra logs or browser console.
+**Context**: vektra-stack FEAT-021 (planned, medium) will add a per-namespace `citations_enabled` flag that makes the assistant cite sources inline in the answer text (`[1][3]` references), stored in the same namespace-config JSONB as `grounding_mode`. This is distinct from FEAT-014 `show_sources` (visibility of the widget sources panel), which the plugin already integrates. When the backend ships it, the per-course Behavior form should grow a third select reusing the existing GET/PATCH namespace-config flow from v0.5.0.
 
-**Proposed approach**: differentiate error display by role in `block_vektra.php`:
-- **Admin/teacher** (`has_capability('moodle/site:config')`): show diagnostic message with error details ("Vektra API error: 401 Unauthorized. Check plugin settings > API key.")
-- **Student**: show "L'assistente non e' al momento disponibile" (localized)
-
-Use Moodle's `\core\notification::error()` for admin-visible banner in addition to block content.
+**Blocked by**: vektra-stack FEAT-021 (not yet implemented; no plugin work possible until the backend exposes the field)
 
 **Acceptance criteria**:
-- [ ] Block shows role-appropriate error message when token generation fails
-- [ ] Admin sees sanitized error code/message from Vektra API (no secrets/tokens/keys)
-- [ ] Student sees localized "unavailable" message
-- [ ] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
-- [ ] No change when everything works (current behavior preserved)
+- [ ] Third behavioral select "Inline citations" (inherit / on / off) with the same effective-value UX as grounding mode
+- [ ] PATCH payload extended with `citations_enabled` (null on inherit)
+- [ ] Release coordinated with the vektra-stack version that ships FEAT-021
 
 ---
 
@@ -69,6 +63,26 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 ---
 
 ## Completed
+
+### FEAT-001: Show diagnostic error when Vektra API connection fails
+
+**Status**: completed | **Priority**: high | **Created**: 2026-03-22 | **Completed**: 2026-07-11
+**Origin**: silent widget failure during API key reset on Kalypso
+
+**Implementation** (branch `feat/diagnostic-error-display`):
+- `vektra_client::generate_token` captures the failure detail, reusing `parse_error_envelope`; a new `get_last_token_error()` accessor exposes `{httpcode, code, message}`. HTTP 0 (network failure) maps to "Connection failed or timed out".
+- New `vektra_client::redact()` strips the configured API key, `Bearer` header values, and JWT-shaped strings from all `debugging()` calls in the client and from the stored diagnostic message.
+- `block_vektra::get_content`: on token failure, site admins (`moodle/site:config`) see `tokenerror_diagnostic` as block content plus a `\core\notification::error()` banner; all other users see the localized `unavailable` string instead of an empty block.
+- New lang strings `tokenerror_diagnostic` and `unavailable` (en/it); version stamp bumped to 2026071100.
+
+**Context**: When the plugin cannot generate a JWT token (API key invalid, Vektra unreachable, 401/timeout), the block silently showed nothing - no widget button, no error message. Admins saw "AI Assistant is active" but students saw a blank block. The root cause (invalid API key, network issue, container down) was invisible without checking Moodle/Vektra logs or browser console.
+
+**Acceptance criteria**:
+- [x] Block shows role-appropriate error message when token generation fails
+- [x] Admin sees sanitized error code/message from Vektra API (no secrets/tokens/keys)
+- [x] Student sees localized "unavailable" message
+- [x] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
+- [x] No change when everything works (current behavior preserved)
 
 ### BUG-001: Namespace mismatch between n8n ingestion and plugin
 

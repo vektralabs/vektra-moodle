@@ -44,6 +44,9 @@ class vektra_client {
     /** @var string Vektra API key (admin scope required for token generation). */
     private string $apikey;
 
+    /** @var array{httpcode: int, code: string, message: string}|null Details of the last generate_token failure. */
+    private ?array $lasttokenerror = null;
+
     /**
      * Constructor.
      *
@@ -68,6 +71,7 @@ class vektra_client {
      * @return array{token: string, expires_at: int}|null Token data, or null on failure.
      */
     public function generate_token(string $studentid, string $courseid, ?string $namespace = null): ?array {
+        $this->lasttokenerror = null;
         $url = $this->apiurl . '/api/v1/learn/tokens';
 
         $body = [
@@ -93,8 +97,17 @@ class vektra_client {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
 
         if ($httpcode !== 200 && $httpcode !== 201) {
+            [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
+            if ($httpcode === 0) {
+                $message = 'Connection failed or timed out';
+            }
+            $this->lasttokenerror = [
+                'httpcode' => $httpcode,
+                'code'     => $errorcode ?? "HTTP {$httpcode}",
+                'message'  => $this->redact($message),
+            ];
             debugging(
-                "Vektra token generation failed: HTTP {$httpcode} - {$response}",
+                $this->redact("Vektra token generation failed: HTTP {$httpcode} - {$response}"),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -102,8 +115,13 @@ class vektra_client {
 
         $data = json_decode($response, true);
         if (!isset($data['token'])) {
+            $this->lasttokenerror = [
+                'httpcode' => $httpcode,
+                'code'     => "HTTP {$httpcode}",
+                'message'  => 'Malformed token response from the Vektra API',
+            ];
             debugging(
-                'Vektra token response missing "token" field: ' . $response,
+                $this->redact('Vektra token response missing "token" field: ' . $response),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -122,6 +140,40 @@ class vektra_client {
             'token'      => $data['token'],
             'expires_at' => $expiresat,
         ];
+    }
+
+    /**
+     * Details of the last generate_token() failure, for diagnostic display.
+     *
+     * The message is already redacted (no API keys, JWTs, or auth headers)
+     * so callers can surface it to privileged users as-is.
+     *
+     * @return array{httpcode: int, code: string, message: string}|null Null when the last call succeeded.
+     */
+    public function get_last_token_error(): ?array {
+        return $this->lasttokenerror;
+    }
+
+    /**
+     * Strip secrets from text destined for logs or on-screen diagnostics.
+     *
+     * Redacts the configured API key, any Authorization bearer value, and
+     * JWT-shaped strings (three dot-separated base64url segments).
+     *
+     * @param string $text Raw text (e.g., an HTTP response body).
+     * @return string Text with secrets replaced by [REDACTED].
+     */
+    private function redact(string $text): string {
+        if ($this->apikey !== '') {
+            $text = str_replace($this->apikey, '[REDACTED]', $text);
+        }
+        $text = preg_replace('/Bearer\s+\S+/', 'Bearer [REDACTED]', $text);
+        $text = preg_replace(
+            '/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/',
+            '[REDACTED]',
+            $text
+        );
+        return $text;
     }
 
     /**
@@ -157,7 +209,7 @@ class vektra_client {
 
         if ($httpcode !== 200) {
             debugging(
-                "Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}",
+                $this->redact("Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}"),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -166,7 +218,7 @@ class vektra_client {
         $data = json_decode($response, true);
         if (!is_array($data) || !isset($data['config']) || !isset($data['resolved'])) {
             debugging(
-                'Vektra namespace config response missing expected fields: ' . $response,
+                $this->redact('Vektra namespace config response missing expected fields: ' . $response),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -219,7 +271,7 @@ class vektra_client {
         [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
 
         debugging(
-            "Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}",
+            $this->redact("Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}"),
             DEBUG_DEVELOPER
         );
 

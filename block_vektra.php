@@ -32,6 +32,9 @@ class block_vektra extends block_base {
     /** @var int Safety margin in seconds to avoid serving about-to-expire tokens. */
     private const TOKEN_EXPIRY_MARGIN_SECONDS = 300;
 
+    /** @var array{httpcode: int, code: string, message: string}|null Details of the last token generation failure. */
+    private ?array $lasttokenerror = null;
+
     /**
      * Initialize the block.
      */
@@ -220,8 +223,22 @@ class block_vektra extends block_base {
         $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey, $namespace);
 
         if ($token === null) {
+            // FEAT-001: role-appropriate error display instead of a silent
+            // blank block. Admins get the sanitized diagnostic detail (the
+            // client already redacts keys/JWTs); students get a localized
+            // "unavailable" notice.
             if (has_capability('moodle/site:config', context_system::instance())) {
-                $this->content->text = get_string('tokenerror', 'block_vektra');
+                $err = $this->lasttokenerror ?? [];
+                $a = (object) [
+                    'message' => s($err['message'] ?? get_string('tokenerror', 'block_vektra')),
+                    'code'    => s($err['code'] ?? 'unknown'),
+                ];
+                $this->content->text = get_string('tokenerror_diagnostic', 'block_vektra', $a);
+                \core\notification::error(
+                    get_string('tokenerror_diagnostic', 'block_vektra', $a)
+                );
+            } else {
+                $this->content->text = get_string('unavailable', 'block_vektra');
             }
             return $this->content;
         }
@@ -353,6 +370,7 @@ class block_vektra extends block_base {
             return $result['token'];
         }
 
+        $this->lasttokenerror = $client->get_last_token_error();
         return null;
     }
 }

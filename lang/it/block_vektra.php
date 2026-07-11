@@ -30,6 +30,8 @@ $string['vektra:usechatbot'] = 'Usare il chatbot AI Vektra';
 $string['widgetactive'] = 'L\'Assistente AI è attivo. Cerca il pulsante chat nell\'angolo in basso a destra.';
 $string['notconfigured'] = 'Vektra non è configurato. Vai su Amministrazione del sito > Plugin > Blocchi > Assistente AI Vektra.';
 $string['tokenerror'] = 'Impossibile connettersi all\'API Vektra. Controlla URL e chiave API nelle impostazioni del plugin.';
+$string['tokenerror_diagnostic'] = 'Errore API Vektra: {$a->message} ({$a->code}). Controlla URL e chiave API in Amministrazione del sito > Plugin > Blocchi > Assistente AI Vektra.';
+$string['unavailable'] = 'L\'assistente non è al momento disponibile. Riprova più tardi.';
 
 // Global settings.
 $string['settings_connection'] = 'Connessione';
