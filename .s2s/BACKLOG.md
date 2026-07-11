@@ -409,7 +409,7 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 
 **Implementation** (shipped in v0.3.0 — commits ead7694, 6a8bb9c, 8b6d452, af8fcb0):
 - `ajax.php` accepts authenticated requests via Moodle session, verifies sesskey for CSRF protection, checks user capability, and generates a new JWT via `vektra_client` using the API key from plugin config.
-- `block_vektra.php:256` adds `data-token-refresh-url` to the widget script tag, pointing to the AJAX endpoint with the block instance ID.
+- `block_vektra::get_content()` adds `data-token-refresh-url` to the widget script tag, pointing to the AJAX endpoint with the block instance ID.
 - Defensive `is_object()` validation on configdata deserialization prevents type-juggling errors when configdata is empty/malformed.
 
 **Context**: The vektra-chat.js widget (vektra-stack) supports token auto-refresh via `data-token-refresh-url` (FEAT-009). When the JWT expires (default 1h), the widget POSTs to that URL and expects a `{"token": "..."}` response. Without this endpoint refresh fails silently and the user sees "Invalid or expired dashboard token" after 1h of session.

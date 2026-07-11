@@ -72,6 +72,10 @@ source citation visibility).
 
 ### Fixed
 
+- Namespace / course ID resolution no longer treats the literal string
+  `'0'` as an unset override: the `!empty()` checks were replaced with a
+  shared `\block_vektra\namespace_resolver` helper using an explicit
+  `is_string($x) && $x !== ''` test across all three resolution sites.
 - `\curl::patch()` is now used for namespace PATCH (was `\curl::post()`
   with `CUSTOMREQUEST=PATCH`, which Moodle's wrapper coerced back to POST
   and the server rejected with 405).
