@@ -17,16 +17,12 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-30
+
 Instructor configuration UI and white-label site settings. Aligns the plugin
 release tag with [vektra-stack v0.5.0](https://github.com/vektralabs/vektra-stack)
 since the two ship together for FEAT-014 (per-course grounding mode and
 source citation visibility).
-
-> **Note**: this section was previously dated `[0.5.0] - 2026-04-26`, but the
-> release was held to roll in the bug fixes tracked as BUG-001 through BUG-010
-> and TECH-001 in `.s2s/BACKLOG.md` (raised by gemini-code-assist and
-> CodeRabbit on the release PR #15). Once those land, this block will be
-> renamed back to `[X.Y.Z] - YYYY-MM-DD` with the actual release date.
 
 ### Added
 
@@ -76,6 +72,10 @@ source citation visibility).
 
 ### Fixed
 
+- Namespace / course ID resolution no longer treats the literal string
+  `'0'` as an unset override: the `!empty()` checks were replaced with a
+  shared `\block_vektra\namespace_resolver` helper using an explicit
+  `is_string($x) && $x !== ''` test across all three resolution sites.
 - `\curl::patch()` is now used for namespace PATCH (was `\curl::post()`
   with `CUSTOMREQUEST=PATCH`, which Moodle's wrapper coerced back to POST
   and the server rejected with 405).
