@@ -17,6 +17,15 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+### Added
+
+- **Role-aware error display on token failure** (FEAT-001): when the plugin
+  cannot generate a widget token (invalid API key, unreachable backend,
+  timeout), site admins now see the sanitized Vektra error code and message
+  in the block plus an error banner, instead of a silent empty block;
+  students see a localized "assistant unavailable" notice. API keys, JWTs,
+  and Authorization headers are redacted from debug logs and diagnostics.
+
 ## [0.5.0] - 2026-04-30
 
 Instructor configuration UI and white-label site settings. Aligns the plugin
