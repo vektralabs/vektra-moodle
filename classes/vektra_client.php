@@ -350,11 +350,13 @@ class vektra_client {
     private function extract_error_object(array $err, string $fallback): array {
         $errorcode = null;
         $message   = $fallback;
-        if (!empty($err['code'])) {
-            $errorcode = (string) $err['code'];
+        // Stricter than !empty(): a literal '0' code or message is a real value
+        // (the same rule the namespace resolver follows).
+        if (isset($err['code']) && is_string($err['code']) && $err['code'] !== '') {
+            $errorcode = $err['code'];
         }
-        if (!empty($err['message'])) {
-            $message = (string) $err['message'];
+        if (isset($err['message']) && is_string($err['message']) && $err['message'] !== '') {
+            $message = $err['message'];
         }
         return [$errorcode, $message];
     }
