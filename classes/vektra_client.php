@@ -285,10 +285,13 @@ class vektra_client {
     /**
      * Extract a (code, message) pair from a Vektra error response body.
      *
-     * The platform wraps errors as `{"detail": {"error": {"code": ..., "message": ...}}}`.
-     * FastAPI validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
-     * plain handlers still emit `{"detail": "<string>"}`. This helper covers all three
-     * shapes and falls back to `HTTP <code>` when nothing parseable is found.
+     * The platform returns the REQ-010 envelope at the document root:
+     * `{"error": {"code": ..., "message": ...}}`. Older backends nested it under
+     * `detail` (`{"detail": {"error": {...}}}`, a FastAPI HTTPException artifact
+     * fixed in DEBT-034); that shape is still accepted as a fallback. FastAPI
+     * validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
+     * plain handlers emit `{"detail": "<string>"}`. This helper covers all of
+     * them and falls back to `HTTP <code>` when nothing parseable is found.
      *
      * @return array{0: string|null, 1: string} [error_code, human-readable message]
      */
@@ -301,18 +304,16 @@ class vektra_client {
             return [$errorcode, $message];
         }
 
+        // Standard Vektra structured envelope at the document root (DEBT-034).
+        if (isset($data['error']) && is_array($data['error'])) {
+            return $this->extract_error_object($data['error'], $message);
+        }
+
         $detail = $data['detail'] ?? null;
 
+        // Legacy: the same envelope nested under `detail` (pre-DEBT-034 backends).
         if (is_array($detail) && isset($detail['error']) && is_array($detail['error'])) {
-            // Standard Vektra structured envelope.
-            $err = $detail['error'];
-            if (!empty($err['code'])) {
-                $errorcode = (string) $err['code'];
-            }
-            if (!empty($err['message'])) {
-                $message = (string) $err['message'];
-            }
-            return [$errorcode, $message];
+            return $this->extract_error_object($detail['error'], $message);
         }
 
         if (is_string($detail) && $detail !== '') {
@@ -336,6 +337,27 @@ class vektra_client {
             }
         }
 
+        return [$errorcode, $message];
+    }
+
+    /**
+     * Pull (code, message) out of a REQ-010 `error` object.
+     *
+     * @param array $err the decoded `error` object (`{"code": ..., "message": ...}`)
+     * @param string $fallback message kept when `error.message` is absent
+     * @return array{0: string|null, 1: string} [error_code, human-readable message]
+     */
+    private function extract_error_object(array $err, string $fallback): array {
+        $errorcode = null;
+        $message   = $fallback;
+        // Stricter than !empty(): a literal '0' code or message is a real value
+        // (the same rule the namespace resolver follows).
+        if (isset($err['code']) && is_string($err['code']) && $err['code'] !== '') {
+            $errorcode = $err['code'];
+        }
+        if (isset($err['message']) && is_string($err['message']) && $err['message'] !== '') {
+            $message = $err['message'];
+        }
         return [$errorcode, $message];
     }
 }

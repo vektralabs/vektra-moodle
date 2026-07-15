@@ -26,6 +26,17 @@ Convention (Keep a Changelog 1.1.0):
   students see a localized "assistant unavailable" notice. API keys, JWTs,
   and Authorization headers are redacted from debug logs and diagnostics.
 
+### Fixed
+
+- Error-code and message parsing (`vektra_client::parse_error_envelope`)
+  now reads the Vektra REQ-010 envelope at the document root
+  (`{"error": {...}}`) as well as the older `detail`-nested form
+  (`{"detail": {"error": {...}}}`). The platform moved the envelope to the
+  root in DEBT-034; without this, the FEAT-001 diagnostic display would have
+  fallen back to a bare `HTTP <code>` instead of the sanitized Vektra code
+  and message. The nested form is still accepted, so the plugin works
+  against backends on either side of that change.
+
 ## [0.5.0] - 2026-04-30
 
 Instructor configuration UI and white-label site settings. Aligns the plugin
