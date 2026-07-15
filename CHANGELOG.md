@@ -81,6 +81,14 @@ source citation visibility).
 
 ### Fixed
 
+- Error-code and message parsing (`vektra_client::parse_error_envelope`)
+  now reads the Vektra REQ-010 envelope at the document root
+  (`{"error": {...}}`) as well as the older `detail`-nested form
+  (`{"detail": {"error": {...}}}`). The platform moved the envelope to the
+  root in DEBT-034; without this, the FEAT-001 diagnostic display would have
+  fallen back to a bare `HTTP <code>` instead of the sanitized Vektra code
+  and message. The nested form is still accepted, so the plugin works
+  against backends on either side of that change.
 - Namespace / course ID resolution no longer treats the literal string
   `'0'` as an unset override: the `!empty()` checks were replaced with a
   shared `\block_vektra\namespace_resolver` helper using an explicit
