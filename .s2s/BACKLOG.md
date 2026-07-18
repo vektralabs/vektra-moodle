@@ -20,19 +20,7 @@
 
 ## Planned
 
-### FEAT-003: Per-course inline citations control (depends on vektra-stack FEAT-021)
-
-**Status**: planned | **Priority**: low | **Created**: 2026-07-11
-**Origin**: v0.6.0 planning, versioning alignment check against the vektra-stack backlog
-
-**Context**: vektra-stack FEAT-021 (planned, medium) will add a per-namespace `citations_enabled` flag that makes the assistant cite sources inline in the answer text (`[1][3]` references), stored in the same namespace-config JSONB as `grounding_mode`. This is distinct from FEAT-014 `show_sources` (visibility of the widget sources panel), which the plugin already integrates. When the backend ships it, the per-course Behavior form should grow a third select reusing the existing GET/PATCH namespace-config flow from v0.5.0.
-
-**Blocked by**: vektra-stack FEAT-021 (not yet implemented; no plugin work possible until the backend exposes the field)
-
-**Acceptance criteria**:
-- [ ] Third behavioral select "Inline citations" (inherit / on / off) with the same effective-value UX as grounding mode
-- [ ] PATCH payload extended with `citations_enabled` (null on inherit)
-- [ ] Release coordinated with the vektra-stack version that ships FEAT-021
+<!-- No planned items. -->
 
 ---
 
@@ -63,6 +51,24 @@
 ---
 
 ## Completed
+
+### FEAT-003: Per-course inline citations control (vektra-stack FEAT-021 integration)
+
+**Status**: completed | **Priority**: low | **Created**: 2026-07-11 | **Completed**: 2026-07-18
+**Origin**: v0.6.0 planning, versioning alignment check against the vektra-stack backlog
+**Unblocked by**: vektra-stack FEAT-021, shipped in [vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack) (completed 2026-07-12, tagged 2026-07-13)
+
+**Implementation** (branch `feat/per-course-inline-citations`):
+- Third behavioral select `config_citations_choice` (Inherit / Yes / No) in the per-course form, with the same "Effective: value (status)" static label as the other two selects, seeded from the namespace GET on form open and frozen when the GET fails.
+- `instance_config_save` extends the PATCH payload with `citations_enabled` (null on inherit, bool otherwise); the field is stripped from configdata like its siblings.
+- New lang strings (`config_citations_*`) in en/it; version stamp bumped to 2026071800.
+
+**Context**: vektra-stack FEAT-021 added a per-namespace `citations_enabled` flag (JSONB, PATCH whitelist `ALLOWED_CONFIG_TYPES`, resolved default `false`, no env var) that makes the assistant cite sources inline in the answer text (`[n]` superscript markers with the source title as tooltip, rendered by the widget). Distinct from FEAT-014 `show_sources` (visibility of the widget sources panel). The plugin reuses the GET/PATCH namespace-config flow from v0.5.0.
+
+**Acceptance criteria**:
+- [x] Third behavioral select "Inline citations" (inherit / yes / no) with the same effective-value UX as grounding mode
+- [x] PATCH payload extended with `citations_enabled` (null on inherit)
+- [x] Release coordinated with the vektra-stack version that ships FEAT-021 (plugin v0.6.0 pairs with stack v0.6.0)
 
 ### FEAT-001: Show diagnostic error when Vektra API connection fails
 
