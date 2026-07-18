@@ -32,6 +32,9 @@ class block_vektra extends block_base {
     /** @var int Safety margin in seconds to avoid serving about-to-expire tokens. */
     private const TOKEN_EXPIRY_MARGIN_SECONDS = 300;
 
+    /** @var array{httpcode: int, code: string, message: string}|null Details of the last token generation failure. */
+    private ?array $lasttokenerror = null;
+
     /**
      * Initialize the block.
      */
@@ -81,7 +84,7 @@ class block_vektra extends block_base {
      * Persist instance config and best-effort PATCH the Vektra namespace config.
      *
      * The local configdata is always saved via the parent. Behavioral fields
-     * (grounding_mode, show_sources) are not stored locally — they are pushed
+     * (grounding_mode, show_sources, citations_enabled) are not stored locally — they are pushed
      * to the Vektra backend, which is the single source of truth. PATCH errors
      * are surfaced as warnings but do not abort the save.
      *
@@ -95,7 +98,8 @@ class block_vektra extends block_base {
         $getok       = (int) ($data->get_ok ?? 0);
         $grounding   = $data->grounding_mode ?? 'inherit';
         $showsources = $data->show_sources_choice ?? 'inherit';
-        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice);
+        $citations   = $data->citations_choice ?? 'inherit';
+        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice, $data->citations_choice);
 
         // Always persist configdata first so the form save itself never fails.
         parent::instance_config_save($data, $nolongerused);
@@ -125,6 +129,14 @@ class block_vektra extends block_base {
             $payload['show_sources'] = true;
         } else if ($showsources === 'no') {
             $payload['show_sources'] = false;
+        }
+
+        if ($citations === 'inherit') {
+            $payload['citations_enabled'] = null;
+        } else if ($citations === 'yes') {
+            $payload['citations_enabled'] = true;
+        } else if ($citations === 'no') {
+            $payload['citations_enabled'] = false;
         }
 
         if (empty($payload)) {
@@ -220,8 +232,22 @@ class block_vektra extends block_base {
         $token = $this->get_cached_token($USER->username, $courseid, $apiurl, $apikey, $namespace);
 
         if ($token === null) {
+            // FEAT-001: role-appropriate error display instead of a silent
+            // blank block. Admins get the sanitized diagnostic detail (the
+            // client already redacts keys/JWTs); students get a localized
+            // "unavailable" notice.
             if (has_capability('moodle/site:config', context_system::instance())) {
-                $this->content->text = get_string('tokenerror', 'block_vektra');
+                $err = $this->lasttokenerror ?? [];
+                $a = (object) [
+                    'message' => s($err['message'] ?? get_string('tokenerror', 'block_vektra')),
+                    'code'    => s($err['code'] ?? 'unknown'),
+                ];
+                $this->content->text = get_string('tokenerror_diagnostic', 'block_vektra', $a);
+                \core\notification::error(
+                    get_string('tokenerror_diagnostic', 'block_vektra', $a)
+                );
+            } else {
+                $this->content->text = get_string('unavailable', 'block_vektra');
             }
             return $this->content;
         }
@@ -353,6 +379,7 @@ class block_vektra extends block_base {
             return $result['token'];
         }
 
+        $this->lasttokenerror = $client->get_last_token_error();
         return null;
     }
 }

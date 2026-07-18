@@ -30,6 +30,8 @@ $string['vektra:usechatbot'] = 'Usare il chatbot AI Vektra';
 $string['widgetactive'] = 'L\'Assistente AI è attivo. Cerca il pulsante chat nell\'angolo in basso a destra.';
 $string['notconfigured'] = 'Vektra non è configurato. Vai su Amministrazione del sito > Plugin > Blocchi > Assistente AI Vektra.';
 $string['tokenerror'] = 'Impossibile connettersi all\'API Vektra. Controlla URL e chiave API nelle impostazioni del plugin.';
+$string['tokenerror_diagnostic'] = 'Errore API Vektra: {$a->message} ({$a->code}). Controlla URL e chiave API in Amministrazione del sito > Plugin > Blocchi > Assistente AI Vektra.';
+$string['unavailable'] = 'L\'assistente non è al momento disponibile. Riprova più tardi.';
 
 // Global settings.
 $string['settings_connection'] = 'Connessione';
@@ -87,6 +89,10 @@ $string['config_show_sources_choice'] = 'Mostra fonti';
 $string['config_show_sources_choice_help'] = 'Indica se il widget mostra le citazioni delle fonti sotto le risposte. "Eredita" usa il valore predefinito del namespace.';
 $string['config_show_sources_yes'] = 'Sì';
 $string['config_show_sources_no'] = 'No';
+$string['config_citations_choice'] = 'Citazioni inline';
+$string['config_citations_choice_help'] = 'Se l\'assistente cita le fonti direttamente nel testo della risposta (es. [1]), con il titolo della fonte visibile al passaggio del mouse. "Eredita" usa il valore predefinito del namespace (disattivato).';
+$string['config_citations_yes'] = 'Sì';
+$string['config_citations_no'] = 'No';
 $string['config_effective_label'] = 'Effettivo: {$a->value} ({$a->status})';
 $string['config_status_default'] = 'predefinito';
 $string['config_status_override'] = 'override';

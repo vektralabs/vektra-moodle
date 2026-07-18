@@ -1,6 +1,6 @@
 # vektra-moodle Backlog
 
-**Updated**: 2026-04-28 (Batch D — PR #15 post-Batch-C review)
+**Updated**: 2026-04-30 (post-v0.5.0 release cleanup)
 **Format**: Single markdown file for tracking work items
 
 ---
@@ -20,44 +20,7 @@
 
 ## Planned
 
-### FEAT-001: Show diagnostic error when Vektra API connection fails
-
-**Status**: planned | **Priority**: high | **Created**: 2026-03-22
-**Origin**: silent widget failure during API key reset on Kalypso
-
-**Context**: When the plugin cannot generate a JWT token (API key invalid, Vektra unreachable, 401/timeout), the block silently shows nothing - no widget button, no error message. Admins see "AI Assistant is active" but students see a blank block. The root cause (invalid API key, network issue, container down) is invisible without checking Moodle/Vektra logs or browser console.
-
-**Proposed approach**: differentiate error display by role in `block_vektra.php`:
-- **Admin/teacher** (`has_capability('moodle/site:config')`): show diagnostic message with error details ("Vektra API error: 401 Unauthorized. Check plugin settings > API key.")
-- **Student**: show "L'assistente non e' al momento disponibile" (localized)
-
-Use Moodle's `\core\notification::error()` for admin-visible banner in addition to block content.
-
-**Acceptance criteria**:
-- [ ] Block shows role-appropriate error message when token generation fails
-- [ ] Admin sees sanitized error code/message from Vektra API (no secrets/tokens/keys)
-- [ ] Student sees localized "unavailable" message
-- [ ] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
-- [ ] No change when everything works (current behavior preserved)
-
-### FEAT-002: AJAX endpoint for automatic widget token refresh
-
-**Status**: in_progress | **Priority**: high | **Created**: 2026-03-23
-**Origin**: vektra-stack FEAT-009 (widget data-token-refresh-url support)
-
-**Context**: The vektra-chat.js widget (vektra-stack) supports token auto-refresh via `data-token-refresh-url` (FEAT-009). When the JWT expires (default 1h), the widget POSTs to that URL and expects a `{"token": "..."}` response. The Moodle plugin does not expose this endpoint and does not pass the attribute in the script tag, so refresh fails silently and the user sees "Invalid or expired dashboard token" after 1h of session.
-
-**Proposed approach**:
-1. Create `ajax.php` that accepts authenticated requests via Moodle session, verifies the user is logged in and enrolled in the course, and generates a new JWT calling Vektra `/api/v1/learn/tokens` with the API key from plugin config
-2. In `block_vektra.php`, add `data-token-refresh-url` to the script tag attributes, pointing to the AJAX endpoint
-3. The endpoint must verify sesskey for CSRF protection
-
-**Acceptance criteria**:
-- [ ] AJAX endpoint generates new JWT for authenticated user/course
-- [ ] Endpoint verifies Moodle session and sesskey (CSRF)
-- [ ] `data-token-refresh-url` added to widget script tag
-- [ ] Token refresh transparent to user (no reload)
-- [ ] Refresh error handled by widget (localized message)
+<!-- No planned items. -->
 
 ---
 
@@ -88,6 +51,44 @@ Use Moodle's `\core\notification::error()` for admin-visible banner in addition 
 ---
 
 ## Completed
+
+### FEAT-003: Per-course inline citations control (vektra-stack FEAT-021 integration)
+
+**Status**: completed | **Priority**: low | **Created**: 2026-07-11 | **Completed**: 2026-07-18
+**Origin**: v0.6.0 planning, versioning alignment check against the vektra-stack backlog
+**Unblocked by**: vektra-stack FEAT-021, shipped in [vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack) (completed 2026-07-12, tagged 2026-07-13)
+
+**Implementation** (branch `feat/per-course-inline-citations`):
+- Third behavioral select `config_citations_choice` (Inherit / Yes / No) in the per-course form, with the same "Effective: value (status)" static label as the other two selects, seeded from the namespace GET on form open and frozen when the GET fails.
+- `instance_config_save` extends the PATCH payload with `citations_enabled` (null on inherit, bool otherwise); the field is stripped from configdata like its siblings.
+- New lang strings (`config_citations_*`) in en/it; version stamp bumped to 2026071800.
+
+**Context**: vektra-stack FEAT-021 added a per-namespace `citations_enabled` flag (JSONB, PATCH whitelist `ALLOWED_CONFIG_TYPES`, resolved default `false`, no env var) that makes the assistant cite sources inline in the answer text (`[n]` superscript markers with the source title as tooltip, rendered by the widget). Distinct from FEAT-014 `show_sources` (visibility of the widget sources panel). The plugin reuses the GET/PATCH namespace-config flow from v0.5.0.
+
+**Acceptance criteria**:
+- [x] Third behavioral select "Inline citations" (inherit / yes / no) with the same effective-value UX as grounding mode
+- [x] PATCH payload extended with `citations_enabled` (null on inherit)
+- [x] Release coordinated with the vektra-stack version that ships FEAT-021 (plugin v0.6.0 pairs with stack v0.6.0)
+
+### FEAT-001: Show diagnostic error when Vektra API connection fails
+
+**Status**: completed | **Priority**: high | **Created**: 2026-03-22 | **Completed**: 2026-07-11
+**Origin**: silent widget failure during API key reset on Kalypso
+
+**Implementation** (branch `feat/diagnostic-error-display`):
+- `vektra_client::generate_token` captures the failure detail, reusing `parse_error_envelope`; a new `get_last_token_error()` accessor exposes `{httpcode, code, message}`. HTTP 0 (network failure) maps to "Connection failed or timed out".
+- New `vektra_client::redact()` strips the configured API key, `Bearer` header values, and JWT-shaped strings from all `debugging()` calls in the client and from the stored diagnostic message.
+- `block_vektra::get_content`: on token failure, site admins (`moodle/site:config`) see `tokenerror_diagnostic` as block content plus a `\core\notification::error()` banner; all other users see the localized `unavailable` string instead of an empty block.
+- New lang strings `tokenerror_diagnostic` and `unavailable` (en/it); version stamp bumped to 2026071100.
+
+**Context**: When the plugin cannot generate a JWT token (API key invalid, Vektra unreachable, 401/timeout), the block silently showed nothing - no widget button, no error message. Admins saw "AI Assistant is active" but students saw a blank block. The root cause (invalid API key, network issue, container down) was invisible without checking Moodle/Vektra logs or browser console.
+
+**Acceptance criteria**:
+- [x] Block shows role-appropriate error message when token generation fails
+- [x] Admin sees sanitized error code/message from Vektra API (no secrets/tokens/keys)
+- [x] Student sees localized "unavailable" message
+- [x] Error is logged via `debugging()` with redaction of API keys, JWTs, and authorization headers
+- [x] No change when everything works (current behavior preserved)
 
 ### BUG-001: Namespace mismatch between n8n ingestion and plugin
 
@@ -420,3 +421,24 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 - [x] `No Changes` detects `_moodleError` and emits a structured failed item
 - [x] Ingestion Summary counts the entry as `failed`
 - [x] No regression on normal / safety-net / deletes-only flows
+
+### FEAT-002: AJAX endpoint for automatic widget token refresh
+
+**Status**: completed | **Priority**: high | **Created**: 2026-03-23 | **Completed**: 2026-03-23
+**Origin**: vektra-stack FEAT-009 (widget data-token-refresh-url support)
+
+**Implementation** (shipped in v0.3.0 — commits ead7694, 6a8bb9c, 8b6d452, af8fcb0):
+- `ajax.php` accepts authenticated requests via Moodle session, verifies sesskey for CSRF protection, checks user capability, and generates a new JWT via `vektra_client` using the API key from plugin config.
+- `block_vektra::get_content()` adds `data-token-refresh-url` to the widget script tag, pointing to the AJAX endpoint with the block instance ID.
+- Defensive `is_object()` validation on configdata deserialization prevents type-juggling errors when configdata is empty/malformed.
+
+**Context**: The vektra-chat.js widget (vektra-stack) supports token auto-refresh via `data-token-refresh-url` (FEAT-009). When the JWT expires (default 1h), the widget POSTs to that URL and expects a `{"token": "..."}` response. Without this endpoint refresh fails silently and the user sees "Invalid or expired dashboard token" after 1h of session.
+
+**Tracker drift note**: status was left at `in_progress` in the backlog after the v0.3.0 ship. Caught during the v0.5.0 release audit (2026-04-30) and corrected here.
+
+**Acceptance criteria**:
+- [x] AJAX endpoint generates new JWT for authenticated user/course
+- [x] Endpoint verifies Moodle session and sesskey (CSRF)
+- [x] `data-token-refresh-url` added to widget script tag
+- [x] Token refresh transparent to user (no reload)
+- [x] Refresh error handled by widget (localized message)

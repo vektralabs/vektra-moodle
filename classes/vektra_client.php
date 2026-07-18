@@ -44,6 +44,9 @@ class vektra_client {
     /** @var string Vektra API key (admin scope required for token generation). */
     private string $apikey;
 
+    /** @var array{httpcode: int, code: string, message: string}|null Details of the last generate_token failure. */
+    private ?array $lasttokenerror = null;
+
     /**
      * Constructor.
      *
@@ -68,6 +71,7 @@ class vektra_client {
      * @return array{token: string, expires_at: int}|null Token data, or null on failure.
      */
     public function generate_token(string $studentid, string $courseid, ?string $namespace = null): ?array {
+        $this->lasttokenerror = null;
         $url = $this->apiurl . '/api/v1/learn/tokens';
 
         $body = [
@@ -93,8 +97,17 @@ class vektra_client {
         $httpcode = $curl->get_info()['http_code'] ?? 0;
 
         if ($httpcode !== 200 && $httpcode !== 201) {
+            [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
+            if ($httpcode === 0) {
+                $message = 'Connection failed or timed out';
+            }
+            $this->lasttokenerror = [
+                'httpcode' => $httpcode,
+                'code'     => $errorcode ?? "HTTP {$httpcode}",
+                'message'  => $this->redact($message),
+            ];
             debugging(
-                "Vektra token generation failed: HTTP {$httpcode} - {$response}",
+                $this->redact("Vektra token generation failed: HTTP {$httpcode} - {$response}"),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -102,8 +115,13 @@ class vektra_client {
 
         $data = json_decode($response, true);
         if (!isset($data['token'])) {
+            $this->lasttokenerror = [
+                'httpcode' => $httpcode,
+                'code'     => "HTTP {$httpcode}",
+                'message'  => 'Malformed token response from the Vektra API',
+            ];
             debugging(
-                'Vektra token response missing "token" field: ' . $response,
+                $this->redact('Vektra token response missing "token" field: ' . $response),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -122,6 +140,40 @@ class vektra_client {
             'token'      => $data['token'],
             'expires_at' => $expiresat,
         ];
+    }
+
+    /**
+     * Details of the last generate_token() failure, for diagnostic display.
+     *
+     * The message is already redacted (no API keys, JWTs, or auth headers)
+     * so callers can surface it to privileged users as-is.
+     *
+     * @return array{httpcode: int, code: string, message: string}|null Null when the last call succeeded.
+     */
+    public function get_last_token_error(): ?array {
+        return $this->lasttokenerror;
+    }
+
+    /**
+     * Strip secrets from text destined for logs or on-screen diagnostics.
+     *
+     * Redacts the configured API key, any Authorization bearer value, and
+     * JWT-shaped strings (three dot-separated base64url segments).
+     *
+     * @param string $text Raw text (e.g., an HTTP response body).
+     * @return string Text with secrets replaced by [REDACTED].
+     */
+    private function redact(string $text): string {
+        if ($this->apikey !== '') {
+            $text = str_replace($this->apikey, '[REDACTED]', $text);
+        }
+        $text = preg_replace('/Bearer\s+\S+/', 'Bearer [REDACTED]', $text);
+        $text = preg_replace(
+            '/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/',
+            '[REDACTED]',
+            $text
+        );
+        return $text;
     }
 
     /**
@@ -157,7 +209,7 @@ class vektra_client {
 
         if ($httpcode !== 200) {
             debugging(
-                "Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}",
+                $this->redact("Vektra get_namespace_config failed: HTTP {$httpcode} - {$response}"),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -166,7 +218,7 @@ class vektra_client {
         $data = json_decode($response, true);
         if (!is_array($data) || !isset($data['config']) || !isset($data['resolved'])) {
             debugging(
-                'Vektra namespace config response missing expected fields: ' . $response,
+                $this->redact('Vektra namespace config response missing expected fields: ' . $response),
                 DEBUG_DEVELOPER
             );
             return null;
@@ -182,12 +234,12 @@ class vektra_client {
      * Patch the namespace configuration on the Vektra API.
      *
      * Calls PATCH /api/v1/admin/namespaces/{namespace}/config with the whitelisted
-     * payload (grounding_mode, show_sources). On HTTP 2xx returns ['ok' => true].
+     * payload (grounding_mode, show_sources, citations_enabled). On HTTP 2xx returns ['ok' => true].
      * On any failure returns ['ok' => false, 'error_code' => string|null, 'message' => string].
      * Never throws.
      *
      * @param string $namespace Namespace identifier.
-     * @param array $payload Whitelisted config keys (grounding_mode, show_sources).
+     * @param array $payload Whitelisted config keys (grounding_mode, show_sources, citations_enabled).
      * @return array{ok: bool, error_code?: string|null, message?: string}
      */
     public function patch_namespace_config(string $namespace, array $payload): array {
@@ -219,7 +271,7 @@ class vektra_client {
         [$errorcode, $message] = $this->parse_error_envelope($response, $httpcode);
 
         debugging(
-            "Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}",
+            $this->redact("Vektra patch_namespace_config failed: HTTP {$httpcode} - {$response}"),
             DEBUG_DEVELOPER
         );
 
@@ -233,10 +285,13 @@ class vektra_client {
     /**
      * Extract a (code, message) pair from a Vektra error response body.
      *
-     * The platform wraps errors as `{"detail": {"error": {"code": ..., "message": ...}}}`.
-     * FastAPI validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
-     * plain handlers still emit `{"detail": "<string>"}`. This helper covers all three
-     * shapes and falls back to `HTTP <code>` when nothing parseable is found.
+     * The platform returns the REQ-010 envelope at the document root:
+     * `{"error": {"code": ..., "message": ...}}`. Older backends nested it under
+     * `detail` (`{"detail": {"error": {...}}}`, a FastAPI HTTPException artifact
+     * fixed in DEBT-034); that shape is still accepted as a fallback. FastAPI
+     * validation errors are `{"detail": [{"msg": ..., "loc": [...]}]}` and a few
+     * plain handlers emit `{"detail": "<string>"}`. This helper covers all of
+     * them and falls back to `HTTP <code>` when nothing parseable is found.
      *
      * @return array{0: string|null, 1: string} [error_code, human-readable message]
      */
@@ -249,18 +304,16 @@ class vektra_client {
             return [$errorcode, $message];
         }
 
+        // Standard Vektra structured envelope at the document root (DEBT-034).
+        if (isset($data['error']) && is_array($data['error'])) {
+            return $this->extract_error_object($data['error'], $message);
+        }
+
         $detail = $data['detail'] ?? null;
 
+        // Legacy: the same envelope nested under `detail` (pre-DEBT-034 backends).
         if (is_array($detail) && isset($detail['error']) && is_array($detail['error'])) {
-            // Standard Vektra structured envelope.
-            $err = $detail['error'];
-            if (!empty($err['code'])) {
-                $errorcode = (string) $err['code'];
-            }
-            if (!empty($err['message'])) {
-                $message = (string) $err['message'];
-            }
-            return [$errorcode, $message];
+            return $this->extract_error_object($detail['error'], $message);
         }
 
         if (is_string($detail) && $detail !== '') {
@@ -284,6 +337,27 @@ class vektra_client {
             }
         }
 
+        return [$errorcode, $message];
+    }
+
+    /**
+     * Pull (code, message) out of a REQ-010 `error` object.
+     *
+     * @param array $err the decoded `error` object (`{"code": ..., "message": ...}`)
+     * @param string $fallback message kept when `error.message` is absent
+     * @return array{0: string|null, 1: string} [error_code, human-readable message]
+     */
+    private function extract_error_object(array $err, string $fallback): array {
+        $errorcode = null;
+        $message   = $fallback;
+        // Stricter than !empty(): a literal '0' code or message is a real value
+        // (the same rule the namespace resolver follows).
+        if (isset($err['code']) && is_string($err['code']) && $err['code'] !== '') {
+            $errorcode = $err['code'];
+        }
+        if (isset($err['message']) && is_string($err['message']) && $err['message'] !== '') {
+            $message = $err['message'];
+        }
         return [$errorcode, $message];
     }
 }

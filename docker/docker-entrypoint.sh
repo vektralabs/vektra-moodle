@@ -125,5 +125,61 @@ if [ -f /var/www/html/config.php ]; then
     " 2>/dev/null && echo "HTTP security configured for Docker integration." || true
 fi
 
+# Ensure n8n WS token exists in Moodle DB.
+# The token must match MOODLE_WS_TOKEN in the n8n stack .env.
+# tokentype=0 (EXTERNAL_TOKEN_PERMANENT) is required — omitting it causes insert failure.
+#
+# N8N_WS_TOKEN is a provisioning input, not the source of truth for token existence.
+# Unsetting it is a no-op: any pre-existing token row stays active. To revoke, delete
+# the token via Moodle admin UI (Site administration → Server → Web services → Manage
+# tokens) or disable the n8n_ingestion external service. Auto-revoke on empty env was
+# considered and rejected: an accidental deploy without the env (missing .env, unset
+# variable) would silently destroy a working production credential.
+if [ -n "${N8N_WS_TOKEN:-}" ] && [ -f /var/www/html/config.php ]; then
+    php -r "
+        define('CLI_SCRIPT', true);
+        require('/var/www/html/config.php');
+        \$token_value = getenv('N8N_WS_TOKEN');
+        \$service = \$DB->get_record('external_services', ['shortname' => 'n8n_ingestion']);
+        if (!\$service) { echo \"n8n_ingestion WS service not found, skipping token setup.\n\"; exit(0); }
+        \$admin = \$DB->get_record('user', ['username' => getenv('ADMIN_USER') ?: 'admin']);
+        if (!\$admin) { echo \"Admin user not found, skipping token setup.\n\"; exit(0); }
+        // Use get_records (plural) to recover from pre-existing duplicates left by an
+        // earlier buggy version of this script (lookup keyed on token value would insert
+        // a new row on every rotation). Keep oldest, delete the rest.
+        \$rows = \$DB->get_records('external_tokens', ['externalserviceid' => \$service->id, 'userid' => \$admin->id, 'tokentype' => 0], 'timecreated ASC, id ASC');
+        \$existing = false;
+        if (count(\$rows) > 0) {
+            \$existing = array_shift(\$rows);
+            if (count(\$rows) > 0) {
+                \$dup_count = count(\$rows);
+                foreach (\$rows as \$dup) { \$DB->delete_records('external_tokens', ['id' => \$dup->id]); }
+                echo \"n8n WS token: removed \" . \$dup_count . \" duplicate(s).\n\";
+            }
+        }
+        if (\$existing) {
+            if (\$existing->token !== \$token_value) {
+                \$existing->token = \$token_value;
+                \$DB->update_record('external_tokens', \$existing);
+                echo \"n8n WS token updated.\n\";
+            } else {
+                echo \"n8n WS token already present and matches.\n\";
+            }
+        } else {
+            \$r = new stdClass();
+            \$r->token              = \$token_value;
+            \$r->tokentype          = 0;
+            \$r->userid             = \$admin->id;
+            \$r->externalserviceid  = \$service->id;
+            \$r->contextid          = context_system::instance()->id;
+            \$r->creatorid          = \$admin->id;
+            \$r->timecreated        = time();
+            \$r->validuntil         = 0;
+            \$DB->insert_record('external_tokens', \$r);
+            echo \"n8n WS token created.\n\";
+        }
+    " || echo "WARNING: n8n WS token setup failed (non-fatal)."
+fi
+
 echo "Starting Apache..."
 exec "$@"

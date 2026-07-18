@@ -17,16 +17,47 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-18
+
+Diagnostics and inline citations. Pairs with
+[vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack), which
+ships the backend half of the citations feature (FEAT-021), the same way
+v0.5.0 paired for FEAT-014.
+
+### Added
+
+- **Per-course form — Inline citations** (FEAT-003): third behavioral select
+  (`Inherit` / `Yes` / `No`) controlling the per-namespace `citations_enabled`
+  flag introduced by
+  [vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack) (FEAT-021).
+  When enabled, the assistant cites its sources inline in the answer text
+  (`[n]` markers with the source title on hover). Same inherit/override UX,
+  effective-value label, and PATCH flow as the existing grounding-mode and
+  show-sources selects; default is inherit (off).
+- **Role-aware error display on token failure** (FEAT-001): when the plugin
+  cannot generate a widget token (invalid API key, unreachable backend,
+  timeout), site admins now see the sanitized Vektra error code and message
+  in the block plus an error banner, instead of a silent empty block;
+  students see a localized "assistant unavailable" notice. API keys, JWTs,
+  and Authorization headers are redacted from debug logs and diagnostics.
+
+### Fixed
+
+- Error-code and message parsing (`vektra_client::parse_error_envelope`)
+  now reads the Vektra REQ-010 envelope at the document root
+  (`{"error": {...}}`) as well as the older `detail`-nested form
+  (`{"detail": {"error": {...}}}`). The platform moved the envelope to the
+  root in DEBT-034; without this, the FEAT-001 diagnostic display would have
+  fallen back to a bare `HTTP <code>` instead of the sanitized Vektra code
+  and message. The nested form is still accepted, so the plugin works
+  against backends on either side of that change.
+
+## [0.5.0] - 2026-04-30
+
 Instructor configuration UI and white-label site settings. Aligns the plugin
 release tag with [vektra-stack v0.5.0](https://github.com/vektralabs/vektra-stack)
 since the two ship together for FEAT-014 (per-course grounding mode and
 source citation visibility).
-
-> **Note**: this section was previously dated `[0.5.0] - 2026-04-26`, but the
-> release was held to roll in the bug fixes tracked as BUG-001 through BUG-010
-> and TECH-001 in `.s2s/BACKLOG.md` (raised by gemini-code-assist and
-> CodeRabbit on the release PR #15). Once those land, this block will be
-> renamed back to `[X.Y.Z] - YYYY-MM-DD` with the actual release date.
 
 ### Added
 
@@ -76,6 +107,10 @@ source citation visibility).
 
 ### Fixed
 
+- Namespace / course ID resolution no longer treats the literal string
+  `'0'` as an unset override: the `!empty()` checks were replaced with a
+  shared `\block_vektra\namespace_resolver` helper using an explicit
+  `is_string($x) && $x !== ''` test across all three resolution sites.
 - `\curl::patch()` is now used for namespace PATCH (was `\curl::post()`
   with `CUSTOMREQUEST=PATCH`, which Moodle's wrapper coerced back to POST
   and the server rejected with 405).

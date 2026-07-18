@@ -30,6 +30,8 @@ $string['vektra:usechatbot'] = 'Use the Vektra AI chatbot';
 $string['widgetactive'] = 'AI Assistant is active. Look for the chat button in the bottom-right corner.';
 $string['notconfigured'] = 'Vektra is not configured. Go to Site administration > Plugins > Blocks > Vektra AI Assistant.';
 $string['tokenerror'] = 'Could not connect to Vektra API. Check the API URL and key in plugin settings.';
+$string['tokenerror_diagnostic'] = 'Vektra API error: {$a->message} ({$a->code}). Check the API URL and key in Site administration > Plugins > Blocks > Vektra AI Assistant.';
+$string['unavailable'] = 'The assistant is currently unavailable. Please try again later.';
 
 // Global settings.
 $string['settings_connection'] = 'Connection';
@@ -87,6 +89,10 @@ $string['config_show_sources_choice'] = 'Show sources';
 $string['config_show_sources_choice_help'] = 'Whether the widget shows source citations beneath answers. "Inherit" uses the namespace default.';
 $string['config_show_sources_yes'] = 'Yes';
 $string['config_show_sources_no'] = 'No';
+$string['config_citations_choice'] = 'Inline citations';
+$string['config_citations_choice_help'] = 'Whether the assistant cites its sources inline in the answer text (e.g., [1]), with the source title shown on hover. "Inherit" uses the namespace default (off).';
+$string['config_citations_yes'] = 'Yes';
+$string['config_citations_no'] = 'No';
 $string['config_effective_label'] = 'Effective: {$a->value} ({$a->status})';
 $string['config_status_default'] = 'default';
 $string['config_status_override'] = 'override';
