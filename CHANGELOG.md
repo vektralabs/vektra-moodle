@@ -19,6 +19,14 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **Per-course form — Inline citations** (FEAT-003): third behavioral select
+  (`Inherit` / `Yes` / `No`) controlling the per-namespace `citations_enabled`
+  flag introduced by
+  [vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack) (FEAT-021).
+  When enabled, the assistant cites its sources inline in the answer text
+  (`[n]` markers with the source title on hover). Same inherit/override UX,
+  effective-value label, and PATCH flow as the existing grounding-mode and
+  show-sources selects; default is inherit (off).
 - **Role-aware error display on token failure** (FEAT-001): when the plugin
   cannot generate a widget token (invalid API key, unreachable backend,
   timeout), site admins now see the sanitized Vektra error code and message

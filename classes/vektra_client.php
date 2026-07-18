@@ -234,12 +234,12 @@ class vektra_client {
      * Patch the namespace configuration on the Vektra API.
      *
      * Calls PATCH /api/v1/admin/namespaces/{namespace}/config with the whitelisted
-     * payload (grounding_mode, show_sources). On HTTP 2xx returns ['ok' => true].
+     * payload (grounding_mode, show_sources, citations_enabled). On HTTP 2xx returns ['ok' => true].
      * On any failure returns ['ok' => false, 'error_code' => string|null, 'message' => string].
      * Never throws.
      *
      * @param string $namespace Namespace identifier.
-     * @param array $payload Whitelisted config keys (grounding_mode, show_sources).
+     * @param array $payload Whitelisted config keys (grounding_mode, show_sources, citations_enabled).
      * @return array{ok: bool, error_code?: string|null, message?: string}
      */
     public function patch_namespace_config(string $namespace, array $payload): array {

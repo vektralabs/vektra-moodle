@@ -84,7 +84,7 @@ class block_vektra extends block_base {
      * Persist instance config and best-effort PATCH the Vektra namespace config.
      *
      * The local configdata is always saved via the parent. Behavioral fields
-     * (grounding_mode, show_sources) are not stored locally — they are pushed
+     * (grounding_mode, show_sources, citations_enabled) are not stored locally — they are pushed
      * to the Vektra backend, which is the single source of truth. PATCH errors
      * are surfaced as warnings but do not abort the save.
      *
@@ -98,7 +98,8 @@ class block_vektra extends block_base {
         $getok       = (int) ($data->get_ok ?? 0);
         $grounding   = $data->grounding_mode ?? 'inherit';
         $showsources = $data->show_sources_choice ?? 'inherit';
-        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice);
+        $citations   = $data->citations_choice ?? 'inherit';
+        unset($data->get_ok, $data->grounding_mode, $data->show_sources_choice, $data->citations_choice);
 
         // Always persist configdata first so the form save itself never fails.
         parent::instance_config_save($data, $nolongerused);
@@ -128,6 +129,14 @@ class block_vektra extends block_base {
             $payload['show_sources'] = true;
         } else if ($showsources === 'no') {
             $payload['show_sources'] = false;
+        }
+
+        if ($citations === 'inherit') {
+            $payload['citations_enabled'] = null;
+        } else if ($citations === 'yes') {
+            $payload['citations_enabled'] = true;
+        } else if ($citations === 'no') {
+            $payload['citations_enabled'] = false;
         }
 
         if (empty($payload)) {

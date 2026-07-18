@@ -113,8 +113,9 @@ class block_vektra_edit_form extends block_edit_form {
         );
         $mform->addHelpButton('config_welcome_message', 'config_welcome_message', 'block_vektra');
 
-        // Behavioral section: grounding_mode and show_sources_choice are saved on
-        // the Vektra backend (PATCH), not in Moodle configdata.
+        // Behavioral section: grounding_mode, show_sources_choice and
+        // citations_choice are saved on the Vektra backend (PATCH), not in
+        // Moodle configdata.
         $mform->addElement(
             'header',
             'vektrabehavioral',
@@ -174,11 +175,32 @@ class block_vektra_edit_form extends block_edit_form {
             );
         }
 
+        $mform->addElement(
+            'select',
+            'config_citations_choice',
+            get_string('config_citations_choice', 'block_vektra'),
+            [
+                'inherit' => get_string('config_inherit', 'block_vektra'),
+                'yes'     => get_string('config_citations_yes', 'block_vektra'),
+                'no'      => get_string('config_citations_no', 'block_vektra'),
+            ]
+        );
+        $mform->setDefault('config_citations_choice', 'inherit');
+        $mform->addHelpButton('config_citations_choice', 'config_citations_choice', 'block_vektra');
+        if ($getok) {
+            $mform->addElement(
+                'static',
+                'config_citations_choice_effective',
+                '',
+                $this->compose_citations_effective_label($nsconfig)
+            );
+        }
+
         if (!$getok && $this->namespaceconfigfetched) {
             // GET attempted but failed (timeout/network/auth/missing config).
             // Freeze the selects so the teacher cannot mistakenly act on inputs that
             // would be ignored at save time.
-            $mform->freeze(['config_grounding_mode', 'config_show_sources_choice']);
+            $mform->freeze(['config_grounding_mode', 'config_show_sources_choice', 'config_citations_choice']);
             $mform->addElement(
                 'static',
                 'config_namespace_unavailable',
@@ -214,6 +236,12 @@ class block_vektra_edit_form extends block_edit_form {
             $defaults->config_show_sources_choice = $raw['show_sources'] ? 'yes' : 'no';
         } else {
             $defaults->config_show_sources_choice = 'inherit';
+        }
+
+        if (array_key_exists('citations_enabled', $raw) && is_bool($raw['citations_enabled'])) {
+            $defaults->config_citations_choice = $raw['citations_enabled'] ? 'yes' : 'no';
+        } else {
+            $defaults->config_citations_choice = 'inherit';
         }
 
         parent::set_data($defaults);
@@ -305,6 +333,33 @@ class block_vektra_edit_form extends block_edit_form {
         }
 
         $statustoken = array_key_exists('show_sources', $raw)
+            ? 'config_status_override'
+            : 'config_status_default';
+
+        $a = (object) [
+            'value'  => get_string($valuetoken, 'block_vektra'),
+            'status' => get_string($statustoken, 'block_vektra'),
+        ];
+        return get_string('config_effective_label', 'block_vektra', $a);
+    }
+
+    /**
+     * Compose the localized "Effective: …" label for citations_enabled.
+     */
+    private function compose_citations_effective_label(array $nsconfig): string {
+        $resolved = $nsconfig['resolved'] ?? [];
+        $raw      = $nsconfig['config'] ?? [];
+
+        $effvalue = $resolved['citations_enabled'] ?? null;
+        if ($effvalue === true) {
+            $valuetoken = 'config_citations_yes';
+        } else if ($effvalue === false) {
+            $valuetoken = 'config_citations_no';
+        } else {
+            $valuetoken = 'config_value_unknown';
+        }
+
+        $statustoken = array_key_exists('citations_enabled', $raw)
             ? 'config_status_override'
             : 'config_status_default';
 
