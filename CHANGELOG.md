@@ -17,6 +17,13 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-18
+
+Diagnostics and inline citations. Pairs with
+[vektra-stack v0.6.0](https://github.com/vektralabs/vektra-stack), which
+ships the backend half of the citations feature (FEAT-021), the same way
+v0.5.0 paired for FEAT-014.
+
 ### Added
 
 - **Per-course form — Inline citations** (FEAT-003): third behavioral select
