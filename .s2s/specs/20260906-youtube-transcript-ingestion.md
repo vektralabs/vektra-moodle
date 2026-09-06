@@ -67,6 +67,25 @@ The mapping is strictly 1:1. The state-file schema
 roughly half the modules, so the "no video found" branch is a normal path, not
 an edge case.
 
+### PDF attachments live on page modules
+
+Slide PDFs are **not** separate `resource` modules. They are attached to `page`
+modules alongside `index.html`:
+
+| Page shape | Count |
+|---|---|
+| `index.html` only — video lecture | 36 |
+| `index.html` + one `application/pdf` — slides | 35 |
+| both video and PDF | 0 |
+| neither | 0 |
+
+**Consequence, and the most dangerous constraint in this change**: collecting a
+page's `index.html` MUST NOT short-circuit the existing per-content loop. A
+`continue` after handling the page module would drop all 35 attached PDFs from
+ingestion — a silent regression of behaviour that works today. Both the
+`index.html` transcript candidate and the normal `SUPPORTED_MIMES` scan must run
+for the same module.
+
 ### Transcript availability
 
 All 36 video IDs resolve to the channel *"Università della Calabria - Campus di
@@ -110,8 +129,14 @@ opened on `fvadicamo/yt-dlp-api` so transcript-only deployments do not need it.
 
 ### Functional
 
-- **FR-1** — The workflow SHALL collect `page` modules from
-  `core_course_get_contents`, identified by `modname === 'page'`.
+- **FR-1** — The workflow SHALL collect, from each `page` module in
+  `core_course_get_contents`, the `contents` entry whose `filename` is
+  `index.html`, as a transcript candidate. Page modules are identified by
+  `modname === 'page'`, never by `mimetype`, which is `NULL`.
+- **FR-1b** — Collecting a page's `index.html` SHALL NOT prevent the existing
+  `SUPPORTED_MIMES` scan from running over that same module's remaining
+  `contents`. The 35 slide PDFs attached to page modules MUST continue to be
+  ingested exactly as today.
 - **FR-2** — For each collected page, the workflow SHALL download the module's
   `index.html` through the existing Moodle WS download path.
 - **FR-3** — The workflow SHALL extract YouTube video IDs from the HTML,
@@ -146,7 +171,7 @@ opened on `fvadicamo/yt-dlp-api` so transcript-only deployments do not need it.
 
 | Node / file | Change |
 |---|---|
-| `Extract Files` | Emit page modules as candidates: `_kind:'page'`, `fileurl` = `index.html` URL, `timemodified` from the module. Existing document handling unchanged. |
+| `Extract Files` | Emit an extra candidate per page module: `_kind:'page'`, `fileurl` = `index.html` URL, `timemodified` from that entry. The existing `SUPPORTED_MIMES` loop still runs over the same module — no `continue` — so attached PDFs keep being ingested. |
 | `Dedup & Diff` | **None.** Key stays `fileurl`. |
 | `Handle Deletions` | **None.** |
 | `Process Single File` | New branch on `_kind === 'page'`: download HTML (existing helper), regex for video ID, `skipped` if none, else fetch transcript, normalize, build `.md` buffer, continue into the existing multipart upload and state write. |
@@ -197,7 +222,8 @@ reader who lands on a citation should see that without leaving the document.
 
 - [ ] A course run ingests 36 transcript documents from the Psicologia generale course
 - [ ] The 35 video-less pages are reported `skipped`, not `failed`
-- [ ] No page produces more than one document
+- [ ] The 35 slide PDFs attached to page modules are still ingested (no regression)
+- [ ] No page produces more than one transcript document
 - [ ] A second run with no content change ingests nothing
 - [ ] Editing a page's content causes exactly that transcript to be re-ingested, with the old document deleted first
 - [ ] With the service stopped, the run completes and reports the affected pages as `failed` with a readable error
