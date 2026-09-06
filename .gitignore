@@ -44,6 +44,8 @@ test_curl.php
 !.s2s/decisions/**
 !.s2s/plans/
 !.s2s/plans/**
+!.s2s/specs/
+!.s2s/specs/**
 
 # Local archive
 .archive/

@@ -20,7 +20,39 @@
 
 ## Planned
 
-<!-- No planned items. -->
+### FEAT-004: YouTube transcript ingestion for the n8n pipeline
+
+**Status**: draft | **Priority**: medium | **Created**: 2026-09-06
+**Spec**: `.s2s/specs/20260906-youtube-transcript-ingestion.md`
+**Branch**: `feat/youtube-transcript-ingestion`
+
+**Context**: Lecture videos are embedded as `<iframe>` inside `mod_page` HTML and
+are invisible to the ingestion workflow, which only collects four document
+mimetypes. For Psicologia generale that is 36 lectures (~91k words) of course
+material absent from the RAG index. Transcripts are fetched from a
+[`yt-dlp-api`](https://github.com/fvadicamo/yt-dlp-api) service added to the n8n
+stack, normalized, and ingested as Markdown through the existing multipart path.
+
+**Verified before specifying** (2026-09-06, live dev stack + real course data):
+- `mod_page` exposes `index.html` with `mimetype` **NULL**, not `text/html` —
+  detection must key on `modname`, not mimetype.
+- Video/page ratio is strictly 1:1 (36 pages with one video, 35 with none, zero
+  with more), so the state-file schema and `Dedup & Diff` are unchanged.
+- All 36 videos carry `it` auto-generated (`asr`) captions only.
+- `yt-dlp-api` fetches 36/36 in 89 s; the hand-rolled watch-page approach fails.
+
+**Known limitation**: ASR output mis-transcribes proper nouns — observed
+*"Finess Cage"* for **Phineas Gage**. Mitigation deferred, tracked in the spec's
+open questions.
+
+**Acceptance criteria**:
+- [ ] 36 transcript documents ingested from the Psicologia generale course
+- [ ] 35 video-less pages reported `skipped`, not `failed`
+- [ ] Re-run with no content change ingests nothing
+- [ ] Editing a page re-ingests exactly that transcript, old document deleted
+- [ ] Service down degrades to per-page `failed`, run completes
+- [ ] `NODE_FUNCTION_ALLOW_EXTERNAL` still empty
+- [ ] README documents the cookie gate and the ASR limitation
 
 ---
 
