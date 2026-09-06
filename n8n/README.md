@@ -227,6 +227,37 @@ The workflow derives the Vektra namespace from the Moodle course shortname by ap
 
 **Important**: the explicit `course_id` and `namespace` overrides on the block settings are used as-is (no slugification). Only the shortname fallback is slugified. If a course shortname produces an unexpected namespace slug, set an explicit `course_id` override in the block settings.
 
+## Transcript extraction (YouTube course material)
+
+Course videos embedded in Moodle pages are ingested as transcripts by the
+`ytdlp-api` service in this stack ([yt-dlp-api](https://github.com/fvadicamo/yt-dlp-api),
+MIT). The image is pre-built; there is nothing to compile.
+
+### Required: a placeholder cookie file
+
+The service refuses to start its YouTube provider unless a cookie path is
+configured, and requests then fail with
+`INVALID_URL: No provider available for URL`. Transcripts of public videos need
+no authentication, so a placeholder satisfying the format check is enough:
+
+```bash
+mkdir -p n8n/cookies
+printf '# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t%s\tPREF\tf1=50000000\n' \
+  "$(( $(date +%s) + 31536000 ))" > n8n/cookies/youtube.txt
+```
+
+Replace it with a real exported cookie file only if you also use the service for
+downloads, which do require authentication.
+
+### Limitation: transcripts are machine-generated
+
+Lecture videos carry YouTube's automatic captions, not human-authored
+subtitles. Proper nouns are frequently wrong — in the Psicologia generale
+corpus the neuropsychology case *Phineas Gage* is transcribed as *"Finess
+Cage"*. A student searching the correct spelling will not retrieve that
+passage. Each ingested document states its provenance in a header so the
+origin of a citation is visible.
+
 ## Troubleshooting
 
 ### "Invalid token" from Moodle

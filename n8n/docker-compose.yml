@@ -17,6 +17,9 @@ services:
       - VEKTRA_API_KEY=${VEKTRA_API_KEY}
       - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
       - DELETION_SAFETY_THRESHOLD=${DELETION_SAFETY_THRESHOLD:-3}
+      - YTDLP_API_URL=${YTDLP_API_URL:-http://ytdlp-api:8000}
+      - YTDLP_API_KEY=${YTDLP_API_KEY}
+      - YTDLP_TRANSCRIPT_LANG=${YTDLP_TRANSCRIPT_LANG:-it}
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
@@ -25,6 +28,21 @@ services:
       - default
       - vektra_stack
       - moodle
+
+  ytdlp-api:
+    image: ghcr.io/fvadicamo/yt-dlp-api:weekly
+    restart: unless-stopped
+    environment:
+      # The app parses this as a JSON list, not a bare string.
+      - 'APP_SECURITY_API_KEYS=["${YTDLP_API_KEY}"]'
+      # Startup validation disables the whole YouTube provider when no cookie
+      # path is set, even though public-video transcripts need no auth. See
+      # n8n/README.md — a non-authenticating placeholder file satisfies it.
+      - APP_YOUTUBE_COOKIE_PATH=/app/cookies/youtube.txt
+    volumes:
+      - ./cookies:/app/cookies:ro
+    networks:
+      - default
 
 volumes:
   n8n_data:
