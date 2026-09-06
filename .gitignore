@@ -49,3 +49,6 @@ test_curl.php
 
 # Local archive
 .archive/
+
+# Subagent-driven development scratch
+.superpowers/
