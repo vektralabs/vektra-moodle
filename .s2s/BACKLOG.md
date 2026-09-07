@@ -20,59 +20,73 @@
 
 ## Planned
 
-### FEAT-004: YouTube transcript ingestion for the n8n pipeline
+### BUG-018: n8n container cannot reach Moodle on the shared Docker network
 
-**Status**: draft | **Priority**: medium | **Created**: 2026-09-06
-**Spec**: `.s2s/specs/20260906-youtube-transcript-ingestion.md`
-**Branch**: `feat/youtube-transcript-ingestion`
+**Status**: planned | **Priority**: high | **Created**: 2026-09-07
+**Blocks**: end-to-end verification of FEAT-004
 
-**Context**: Lecture videos are embedded as `<iframe>` inside `mod_page` HTML and
-are invisible to the ingestion workflow, which only collects four document
-mimetypes. For Psicologia generale that is 36 lectures (~91k words) of course
-material absent from the RAG index. Transcripts are fetched from a
-[`yt-dlp-api`](https://github.com/fvadicamo/yt-dlp-api) service added to the n8n
-stack, normalized, and ingested as Markdown through the existing multipart path.
+**Context**: The n8n container resolves `vektra-moodle` to the correct address
+(172.21.0.3) and sits on the same network (`docker_default`) at 172.21.0.4, yet
+every connection to port 80 is refused. A throwaway `alpine` container attached
+to the same network reaches `http://vektra-moodle/login/index.php` and gets
+HTTP 303, and Moodle answers on port 80 inside its own container and on the
+host at `localhost:10180`. `docker compose restart` and
+`docker compose up -d --force-recreate n8n` both left the fault in place.
+`ytdlp-api` is reachable from the same n8n container, so it is not a
+blanket networking failure.
 
-**Verified before specifying** (2026-09-06, live dev stack + real course data):
-- `mod_page` exposes `index.html` with `mimetype` **NULL**, not `text/html` —
-  detection must key on `modname`, not mimetype.
-- Video/page ratio is strictly 1:1 (36 pages with one video, 35 with none, zero
-  with more), so the state-file schema and `Dedup & Diff` are unchanged.
-- All 36 videos carry `it` auto-generated (`asr`) captions only.
-- `yt-dlp-api` fetches 36/36 in 89 s; the hand-rolled watch-page approach fails.
-
-**Known limitation**: ASR output mis-transcribes proper nouns — observed
-*"Finess Cage"* for **Phineas Gage**. Mitigation deferred, tracked in the spec's
-open questions.
+This blocks any workflow run: execution dies at the first HTTP node,
+`Get Courses`, in under a tenth of a second.
 
 **Acceptance criteria**:
-- [ ] 36 transcript documents ingested from the Psicologia generale course
-- [ ] 35 video-less pages reported `skipped`, not `failed`
-- [ ] Re-run with no content change ingests nothing
-- [ ] Editing a page re-ingests exactly that transcript, old document deleted
-- [ ] Service down degrades to per-page `failed`, run completes
-- [ ] `NODE_FUNCTION_ALLOW_EXTERNAL` still empty
-- [ ] README documents the cookie gate and the ASR limitation
+- [ ] Root cause identified
+- [ ] `wget -q -O - "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
+- [ ] A full workflow run reaches `Extract Files`
 
 ---
 
-<!-- Add items here using the format below -->
-<!--
-### FEAT-001: Feature Title
+### DEBT-001: Workflow JS has no test harness
 
-**Status**: planned | **Created**: 2026-03-17
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-07
 
-**Context**: Description of the feature or task.
+**Context**: `n8n/workflows/moodle-ingest.json` carries several hundred lines of
+JavaScript inside JSON strings, and CI lints PHP only. That code has produced
+roughly ten tracked bugs (BUG-004, 008, 009, 011, 013, 014, 016, 017). FEAT-004
+was verified with throwaway probes that executed the real node code against real
+course data, which worked well but lived in `/tmp` and died with the session.
 
-**Traceability** (optional):
-- **Originated from**: IDEA-001 | brainstorm:{session-id}
-- **Implements**: REQ-001, REQ-002
-- **Plan**: {plan-id}
+Choosing and introducing a test framework is a maintainer decision, which is why
+FEAT-004 did not do it on a feature branch.
 
-**Acceptance Criteria**:
-- [ ] Criterion 1
-- [ ] Criterion 2
--->
+**Acceptance criteria**:
+- [ ] Node code extractable and unit-testable without a running n8n
+- [ ] Tests run in CI on pull requests
+- [ ] The FEAT-004 probes are ported into it
+
+---
+
+### DEBT-002: Ten action/status combinations are counted in no ingestion total
+
+**Status**: planned | **Priority**: low | **Created**: 2026-09-07
+
+**Context**: Found while reviewing FEAT-004; predates it. Executing
+`Ingestion Summary` over the full cross product of every `action` and `status`
+the pipeline can emit shows 10 combinations that match none of its six counting
+branches: `new/exists`, `new/alias`, `new/unchanged`, `updated/exists`,
+`updated/alias`, `updated/unchanged`, `removed/new`, `removed/exists`,
+`removed/alias`, `removed/unchanged`.
+
+The reachable ones are `new/exists` and `new/alias`: `Process Single File` keeps
+Vektra's raw status when the response carries no `document_id`. Such results
+still appear in `details` but in no total, so `new + updated + removed +
+unchanged + skipped + failed` can silently be less than the number of files
+processed.
+
+**Acceptance criteria**:
+- [ ] Every emitted combination increments exactly one total, or a explicit `other` bucket exists
+- [ ] A regression check covers the cross product
+
+---
 
 ---
 
@@ -83,6 +97,52 @@ open questions.
 ---
 
 ## Completed
+
+### FEAT-004: YouTube transcript ingestion for the n8n pipeline
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-09-06 | **Completed**: 2026-09-07
+**Spec**: `.s2s/specs/20260906-youtube-transcript-ingestion.md`
+**Plan**: `.s2s/plans/20260906-233334-youtube-transcript-ingestion.md`
+**Branch**: `feat/youtube-transcript-ingestion`
+
+**Context**: Lecture videos are embedded as `<iframe>` inside `mod_page` HTML and
+were invisible to the ingestion workflow, which only collected four document
+mimetypes. For Psicologia generale that is 36 lectures (~91k words) absent from
+the RAG index. Transcripts are fetched from a
+[`yt-dlp-api`](https://github.com/fvadicamo/yt-dlp-api) service added to the n8n
+stack, reflowed, and ingested as Markdown through the existing multipart path.
+
+**Implementation** (commits d872784, 67856e8, 57d207b, b2fb966, 7f0b434):
+- `Extract Files` emits each page module's `index.html` as a transcript
+  candidate, keyed on `modname` because `mimetype` is `NULL`. The existing
+  `SUPPORTED_MIMES` loop still runs over the same module, so PDFs attached to
+  page modules keep ingesting.
+- `Process Single File` branches on `_kind === 'page'`: extract the video id,
+  fetch captions, reflow, build Markdown in memory, reuse the multipart upload.
+  Pages with no embed return `skipped`; fetch failures fail that page alone.
+- `Ingestion Summary` counts `skipped` separately from `unchanged`.
+- `ytdlp-api` service added to `n8n/docker-compose.yml`, pinned to `:weekly`.
+
+**Verified** (dev stack, real course 3 data):
+- [x] `Extract Files` yields 71 page candidates and 35 PDF candidates — no PDF regression
+- [x] 36 pages carry an embed, 35 do not; no page carries more than one
+- [x] Transcripts retrieve 36/36 through the service, 91,387 words, ~2.5 s each
+- [x] Reflowed text contains no mid-sentence line breaks
+- [x] `Ingestion Summary` counters correct across all 32 action/status combinations, with no double counting and no new fall-through
+- [x] A page edited to drop its embed no longer loops: the stale state entry is removed
+- [x] `NODE_FUNCTION_ALLOW_EXTERNAL` still empty
+- [x] `README.md` documents the cookie gate and the ASR limitation
+
+**Not verified — requires the operator's environment** (see BUG-018):
+- [ ] A full workflow run ingesting 36 transcript documents
+- [ ] Idempotence across two consecutive runs
+- [ ] Update handling deletes the old document before re-ingesting
+- [ ] Graceful degradation with `ytdlp-api` stopped
+- [ ] A `text/markdown` buffer ingests through `POST /api/v1/ingest`
+
+**Known limitation**: ASR output mis-transcribes proper nouns — observed
+*"Finess Cage"* for **Phineas Gage**. Documented in `n8n/README.md` and in each
+document's provenance header. Mitigation deferred; see the spec's open questions.
 
 ### FEAT-003: Per-course inline citations control (vektra-stack FEAT-021 integration)
 
