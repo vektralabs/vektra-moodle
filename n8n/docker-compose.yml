@@ -33,7 +33,10 @@ services:
     image: ghcr.io/fvadicamo/yt-dlp-api:weekly
     restart: unless-stopped
     environment:
-      # The app parses this as a JSON list, not a bare string.
+      # The app parses this as a JSON list, not a bare string. Compose has no
+      # escaping, so the value is interpolated raw: a key containing a double
+      # quote or a backslash produces invalid JSON and the service exits at
+      # startup. Keep YTDLP_API_KEY to [A-Za-z0-9_-] — see n8n/.env.example.
       - 'APP_SECURITY_API_KEYS=["${YTDLP_API_KEY}"]'
       # Startup validation disables the whole YouTube provider when no cookie
       # path is set, even though public-video transcripts need no auth. See
