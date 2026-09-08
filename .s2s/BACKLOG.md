@@ -20,6 +20,44 @@
 
 ## Planned
 
+### DEBT-003: Credentials travel in cleartext between the ingestion containers
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-08
+**Raised by**: CodeRabbit on PR #29 (comments 3956019179, 3956019205), CWE-319
+
+**Context**: Every credential the ingestion pipeline carries moves over plain
+HTTP on the Compose networks:
+
+| Hop | Credential | Transport |
+|---|---|---|
+| n8n -> Moodle | `MOODLE_WS_TOKEN` | query string, HTTP |
+| n8n -> Vektra | `VEKTRA_API_KEY` | `Authorization` header, HTTP |
+| n8n -> ytdlp-api | `YTDLP_API_KEY` | `X-API-Key` header, HTTP |
+
+The third was added by FEAT-004 and is what surfaced the finding, but it is the
+least valuable of the three: anyone able to observe that bridge already holds
+the Moodle web-service token and the Vektra ingest key. Encrypting one hop
+would not reduce the exposure, only make the stack inconsistent — which is why
+FEAT-004 declined to do it in isolation rather than because the finding is wrong.
+
+**This item is not a fix.** It records an accepted risk. The risk is bounded by
+the networks being private to the Compose project, and it stands until the work
+below is done.
+
+**Scope of an actual fix**:
+- TLS termination in front of `ytdlp-api`, natively or via a reverse proxy
+- A local CA or self-signed certificates that `httpReq` in the workflow trusts
+- The same treatment for the Moodle and Vektra hops, or the exposure is unchanged
+- Roughly half a day, touching three services; deliberately out of scope for a
+  feature branch that only added one more consumer of an existing pattern
+
+**Acceptance criteria**:
+- [ ] All three hops use TLS with certificate validation, or an equivalent authenticated transport boundary
+- [ ] No credential is observable to a process that can read the Compose bridge
+- [ ] `n8n/README.md` documents the certificate setup
+
+---
+
 ### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
 
 **Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
