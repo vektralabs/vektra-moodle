@@ -162,11 +162,18 @@ with the Vektra platform stack deliberately down):
       code fault. Transcript retrieval itself therefore succeeded for all 36.
 - [x] Failures stayed per-item and the run completed with status `success`
 
-**Still not verified — needs the Vektra platform running**:
-- [ ] A `text/markdown` buffer ingests through `POST /api/v1/ingest`
-- [ ] Idempotence across two consecutive runs
-- [ ] Update handling deletes the old document before re-ingesting
-- [ ] Graceful degradation with `ytdlp-api` stopped
+**Verified against the full stack** (2026-09-08, Vektra + qdrant running):
+- [x] `text/markdown` ingests through `POST /api/v1/ingest`: 36 new, 35 skipped,
+      0 failed, every transcript returning a `document_id`
+- [x] Idempotence: an immediate second run reported 0 new, 0 updated, 0 failed
+- [x] Update handling: editing one page produced exactly `1 updated`; the old
+      document was soft-deleted (`deletion_reason: user_request`) before the new
+      one was written, and the state entry moved to the new id. No other page
+      was touched.
+- [x] Graceful degradation: with `ytdlp-api` stopped, the run still completed
+      (`status: success`) and only the affected page failed, with
+      `getaddrinfo ENOTFOUND ytdlp-api`. Restarting the service let the next run
+      re-ingest it unaided, leaving exactly 36 live transcripts in Vektra.
 
 **Known limitation**: ASR output mis-transcribes proper nouns — observed
 *"Finess Cage"* for **Phineas Gage**. Documented in `n8n/README.md` and in each
