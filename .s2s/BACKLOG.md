@@ -20,28 +20,47 @@
 
 ## Planned
 
-### BUG-018: n8n container cannot reach Moodle on the shared Docker network
+### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
 
-**Status**: planned | **Priority**: high | **Created**: 2026-09-07
-**Blocks**: end-to-end verification of FEAT-004
+**Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
 
-**Context**: The n8n container resolves `vektra-moodle` to the correct address
-(172.21.0.3) and sits on the same network (`docker_default`) at 172.21.0.4, yet
-every connection to port 80 is refused. A throwaway `alpine` container attached
-to the same network reaches `http://vektra-moodle/login/index.php` and gets
-HTTP 303, and Moodle answers on port 80 inside its own container and on the
-host at `localhost:10180`. `docker compose restart` and
-`docker compose up -d --force-recreate n8n` both left the fault in place.
-`ytdlp-api` is reachable from the same n8n container, so it is not a
-blanket networking failure.
+**Context**: Every workflow run died at the first HTTP node, `Get Courses`, in
+under a tenth of a second. Originally logged as a Docker networking fault
+because `wget` from the n8n container reported `Connection refused` while a
+throwaway container on the same network appeared to succeed.
 
-This blocks any workflow run: execution dies at the first HTTP node,
-`Get Courses`, in under a tenth of a second.
+**That diagnosis was wrong.** The network was fine throughout: `nc -z` from the
+n8n container reported port 80 open on Moodle at the same moment `wget` to the
+same address reported `Connection refused`. Verbose `wget` showed why:
+
+```
+Connecting to 172.21.0.3 (172.21.0.3:80)
+Connecting to localhost:10180 ([::1]:10180)
+wget: can't connect to remote host: Connection refused
+```
+
+Moodle answered, then redirected to its `$CFG->wwwroot`, which the dev stack
+defaults to `http://localhost:10180` for browser convenience. Inside the n8n
+container `localhost` is n8n itself, where nothing listens on 10180. The
+throwaway-container test had only ever checked the `303` status without
+following the redirect, which is what made the fault look container-specific.
+
+**Resolution**: set `MOODLE_URL=http://vektra-moodle` in `docker/.env` and
+recreate the Moodle container, so `wwwroot` matches the hostname n8n calls.
+This is the configuration `docker/docker-compose.yml:29-32` already documents;
+it had simply never been applied to this environment. It is not a code defect
+and affects no deployment where the two stacks were brought up together.
+
+**Consequence for browser access**: with `wwwroot` set to the Docker hostname,
+opening `http://localhost:10180` from the host redirects to `http://vektra-moodle`
+and fails until `127.0.0.1 vektra-moodle` is added to the host's `/etc/hosts`,
+as the same compose comment states.
 
 **Acceptance criteria**:
-- [ ] Root cause identified
-- [ ] `wget -q -O - "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
-- [ ] A full workflow run reaches `Extract Files`
+- [x] Root cause identified
+- [x] `wget "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
+- [x] `core_course_get_courses` returns JSON to n8n
+- [x] A full workflow run reaches `Extract Files` and completes
 
 ---
 
@@ -133,12 +152,21 @@ stack, reflowed, and ingested as Markdown through the existing multipart path.
 - [x] `NODE_FUNCTION_ALLOW_EXTERNAL` still empty
 - [x] `README.md` documents the cookie gate and the ASR limitation
 
-**Not verified — requires the operator's environment** (see BUG-018):
-- [ ] A full workflow run ingesting 36 transcript documents
+**Verified in a live workflow run** (2026-09-08, after BUG-018 was resolved,
+with the Vektra platform stack deliberately down):
+- [x] `Extract Files` produced 106 candidates in the real pipeline — 71 page + 35 PDF
+- [x] The 35 PDFs were classified `unchanged` and not re-ingested: no regression
+- [x] 36 pages resolved a transcript, 35 reported `skipped`
+- [x] The summary reported `35 skipped, 36 failed`, and every failure was
+      `getaddrinfo ENOTFOUND vektra-stack-vektra-1` — the absent platform, not a
+      code fault. Transcript retrieval itself therefore succeeded for all 36.
+- [x] Failures stayed per-item and the run completed with status `success`
+
+**Still not verified — needs the Vektra platform running**:
+- [ ] A `text/markdown` buffer ingests through `POST /api/v1/ingest`
 - [ ] Idempotence across two consecutive runs
 - [ ] Update handling deletes the old document before re-ingesting
 - [ ] Graceful degradation with `ytdlp-api` stopped
-- [ ] A `text/markdown` buffer ingests through `POST /api/v1/ingest`
 
 **Known limitation**: ASR output mis-transcribes proper nouns — observed
 *"Finess Cage"* for **Phineas Gage**. Documented in `n8n/README.md` and in each
