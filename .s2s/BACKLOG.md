@@ -20,27 +20,130 @@
 
 ## Planned
 
-<!-- No planned items. -->
+### DEBT-003: Credentials travel in cleartext between the ingestion containers
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-08
+**Raised by**: CodeRabbit on PR #29 (comments 3956019179, 3956019205), CWE-319
+
+**Context**: Every credential the ingestion pipeline carries moves over plain
+HTTP on the Compose networks:
+
+| Hop | Credential | Transport |
+|---|---|---|
+| n8n -> Moodle | `MOODLE_WS_TOKEN` | query string, HTTP |
+| n8n -> Vektra | `VEKTRA_API_KEY` | `Authorization` header, HTTP |
+| n8n -> ytdlp-api | `YTDLP_API_KEY` | `X-API-Key` header, HTTP |
+
+The third was added by FEAT-004 and is what surfaced the finding, but it is the
+least valuable of the three: anyone able to observe that bridge already holds
+the Moodle web-service token and the Vektra ingest key. Encrypting one hop
+would not reduce the exposure, only make the stack inconsistent — which is why
+FEAT-004 declined to do it in isolation rather than because the finding is wrong.
+
+**This item is not a fix.** It records an accepted risk. The risk is bounded by
+the networks being private to the Compose project, and it stands until the work
+below is done.
+
+**Scope of an actual fix**:
+- TLS termination in front of `ytdlp-api`, natively or via a reverse proxy
+- A local CA or self-signed certificates that `httpReq` in the workflow trusts
+- The same treatment for the Moodle and Vektra hops, or the exposure is unchanged
+- Roughly half a day, touching three services; deliberately out of scope for a
+  feature branch that only added one more consumer of an existing pattern
+
+**Acceptance criteria**:
+- [ ] All three hops use TLS with certificate validation, or an equivalent authenticated transport boundary
+- [ ] No credential is observable to a process that can read the Compose bridge
+- [ ] `n8n/README.md` documents the certificate setup
 
 ---
 
-<!-- Add items here using the format below -->
-<!--
-### FEAT-001: Feature Title
+### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
 
-**Status**: planned | **Created**: 2026-03-17
+**Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
 
-**Context**: Description of the feature or task.
+**Context**: Every workflow run died at the first HTTP node, `Get Courses`, in
+under a tenth of a second. Originally logged as a Docker networking fault
+because `wget` from the n8n container reported `Connection refused` while a
+throwaway container on the same network appeared to succeed.
 
-**Traceability** (optional):
-- **Originated from**: IDEA-001 | brainstorm:{session-id}
-- **Implements**: REQ-001, REQ-002
-- **Plan**: {plan-id}
+**That diagnosis was wrong.** The network was fine throughout: `nc -z` from the
+n8n container reported port 80 open on Moodle at the same moment `wget` to the
+same address reported `Connection refused`. Verbose `wget` showed why:
 
-**Acceptance Criteria**:
-- [ ] Criterion 1
-- [ ] Criterion 2
--->
+```
+Connecting to 172.21.0.3 (172.21.0.3:80)
+Connecting to localhost:10180 ([::1]:10180)
+wget: can't connect to remote host: Connection refused
+```
+
+Moodle answered, then redirected to its `$CFG->wwwroot`, which the dev stack
+defaults to `http://localhost:10180` for browser convenience. Inside the n8n
+container `localhost` is n8n itself, where nothing listens on 10180. The
+throwaway-container test had only ever checked the `303` status without
+following the redirect, which is what made the fault look container-specific.
+
+**Resolution**: set `MOODLE_URL=http://vektra-moodle` in `docker/.env` and
+recreate the Moodle container, so `wwwroot` matches the hostname n8n calls.
+This is the configuration `docker/docker-compose.yml:29-32` already documents;
+it had simply never been applied to this environment. It is not a code defect
+and affects no deployment where the two stacks were brought up together.
+
+**Consequence for browser access**: with `wwwroot` set to the Docker hostname,
+opening `http://localhost:10180` from the host redirects to `http://vektra-moodle`
+and fails until `127.0.0.1 vektra-moodle` is added to the host's `/etc/hosts`,
+as the same compose comment states.
+
+**Acceptance criteria**:
+- [x] Root cause identified
+- [x] `wget "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
+- [x] `core_course_get_courses` returns JSON to n8n
+- [x] A full workflow run reaches `Extract Files` and completes
+
+---
+
+### DEBT-001: Workflow JS has no test harness
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-07
+
+**Context**: `n8n/workflows/moodle-ingest.json` carries several hundred lines of
+JavaScript inside JSON strings, and CI lints PHP only. That code has produced
+roughly ten tracked bugs (BUG-004, 008, 009, 011, 013, 014, 016, 017). FEAT-004
+was verified with throwaway probes that executed the real node code against real
+course data, which worked well but lived in `/tmp` and died with the session.
+
+Choosing and introducing a test framework is a maintainer decision, which is why
+FEAT-004 did not do it on a feature branch.
+
+**Acceptance criteria**:
+- [ ] Node code extractable and unit-testable without a running n8n
+- [ ] Tests run in CI on pull requests
+- [ ] The FEAT-004 probes are ported into it
+
+---
+
+### DEBT-002: Ten action/status combinations are counted in no ingestion total
+
+**Status**: planned | **Priority**: low | **Created**: 2026-09-07
+
+**Context**: Found while reviewing FEAT-004; predates it. Executing
+`Ingestion Summary` over the full cross product of every `action` and `status`
+the pipeline can emit shows 10 combinations that match none of its six counting
+branches: `new/exists`, `new/alias`, `new/unchanged`, `updated/exists`,
+`updated/alias`, `updated/unchanged`, `removed/new`, `removed/exists`,
+`removed/alias`, `removed/unchanged`.
+
+The reachable ones are `new/exists` and `new/alias`: `Process Single File` keeps
+Vektra's raw status when the response carries no `document_id`. Such results
+still appear in `details` but in no total, so `new + updated + removed +
+unchanged + skipped + failed` can silently be less than the number of files
+processed.
+
+**Acceptance criteria**:
+- [ ] Every emitted combination increments exactly one total, or a explicit `other` bucket exists
+- [ ] A regression check covers the cross product
+
+---
 
 ---
 
@@ -51,6 +154,68 @@
 ---
 
 ## Completed
+
+### FEAT-004: YouTube transcript ingestion for the n8n pipeline
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-09-06 | **Completed**: 2026-09-07
+**Spec**: `.s2s/specs/20260906-youtube-transcript-ingestion.md`
+**Plan**: `.s2s/plans/20260906-233334-youtube-transcript-ingestion.md`
+**Branch**: `feat/youtube-transcript-ingestion`
+
+**Context**: Lecture videos are embedded as `<iframe>` inside `mod_page` HTML and
+were invisible to the ingestion workflow, which only collected four document
+mimetypes. For Psicologia generale that is 36 lectures (~91k words) absent from
+the RAG index. Transcripts are fetched from a
+[`yt-dlp-api`](https://github.com/fvadicamo/yt-dlp-api) service added to the n8n
+stack, reflowed, and ingested as Markdown through the existing multipart path.
+
+**Implementation** (commits d872784, 67856e8, 57d207b, b2fb966, 7f0b434):
+- `Extract Files` emits each page module's `index.html` as a transcript
+  candidate, keyed on `modname` because `mimetype` is `NULL`. The existing
+  `SUPPORTED_MIMES` loop still runs over the same module, so PDFs attached to
+  page modules keep ingesting.
+- `Process Single File` branches on `_kind === 'page'`: extract the video id,
+  fetch captions, reflow, build Markdown in memory, reuse the multipart upload.
+  Pages with no embed return `skipped`; fetch failures fail that page alone.
+- `Ingestion Summary` counts `skipped` separately from `unchanged`.
+- `ytdlp-api` service added to `n8n/docker-compose.yml`, pinned to `:weekly`.
+
+**Verified** (dev stack, real course 3 data):
+- [x] `Extract Files` yields 71 page candidates and 35 PDF candidates — no PDF regression
+- [x] 36 pages carry an embed, 35 do not; no page carries more than one
+- [x] Transcripts retrieve 36/36 through the service, 91,387 words, ~2.5 s each
+- [x] Reflowed text contains no mid-sentence line breaks
+- [x] `Ingestion Summary` counters correct across all 32 action/status combinations, with no double counting and no new fall-through
+- [x] A page edited to drop its embed no longer loops: the stale state entry is removed
+- [x] `NODE_FUNCTION_ALLOW_EXTERNAL` still empty
+- [x] `README.md` documents the cookie gate and the ASR limitation
+
+**Verified in a live workflow run** (2026-09-08, after BUG-018 was resolved,
+with the Vektra platform stack deliberately down):
+- [x] `Extract Files` produced 106 candidates in the real pipeline — 71 page + 35 PDF
+- [x] The 35 PDFs were classified `unchanged` and not re-ingested: no regression
+- [x] 36 pages resolved a transcript, 35 reported `skipped`
+- [x] The summary reported `35 skipped, 36 failed`, and every failure was
+      `getaddrinfo ENOTFOUND vektra-stack-vektra-1` — the absent platform, not a
+      code fault. Transcript retrieval itself therefore succeeded for all 36.
+- [x] Failures stayed per-item and the run completed with status `success`
+
+**Verified against the full stack** (2026-09-08, Vektra + qdrant running):
+- [x] `text/markdown` ingests through `POST /api/v1/ingest`: 36 new, 35 skipped,
+      0 failed, every transcript returning a `document_id`
+- [x] Idempotence: an immediate second run reported 0 new, 0 updated, 0 failed
+- [x] Update handling: editing one page produced exactly `1 updated`; the old
+      document was soft-deleted (`deletion_reason: user_request`) before the new
+      one was written, and the state entry moved to the new id. No other page
+      was touched.
+- [x] Graceful degradation: with `ytdlp-api` stopped, the run still completed
+      (`status: success`) and only the affected page failed, with
+      `getaddrinfo ENOTFOUND ytdlp-api`. Restarting the service let the next run
+      re-ingest it unaided, leaving exactly 36 live transcripts in Vektra.
+
+**Known limitation**: ASR output mis-transcribes proper nouns — observed
+*"Finess Cage"* for **Phineas Gage**. Documented in `n8n/README.md` and in each
+document's provenance header. Mitigation deferred; see the spec's open questions.
 
 ### FEAT-003: Per-course inline citations control (vektra-stack FEAT-021 integration)
 

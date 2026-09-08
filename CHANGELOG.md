@@ -17,6 +17,53 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+### Added
+
+- **n8n — YouTube transcript ingestion** (FEAT-004): lecture videos embedded in
+  Moodle page modules are now ingested as transcripts. The workflow collects
+  each page's `index.html`, extracts the embedded YouTube id, and fetches
+  captions from a new `ytdlp-api` service in the n8n stack
+  ([yt-dlp-api](https://github.com/fvadicamo/yt-dlp-api), pinned to `:weekly`
+  so upstream tracking of YouTube's changes is inherited rather than
+  maintained here). The caption text is reflowed out of its subtitle line
+  wraps and ingested as Markdown with a provenance header, through the
+  multipart path the workflow already used for documents.
+  `NODE_FUNCTION_ALLOW_EXTERNAL` stays empty: the workflow reaches the service
+  over HTTP, as it already does for Moodle and Vektra.
+- **n8n — `skipped` counted separately in the ingestion summary**: pages with
+  no embed report `skipped` instead of being folded into `unchanged`. Roughly
+  half of all page modules are slide pages with no video, so without this a
+  healthy run and a completely broken extractor produced identical summaries.
+
+### Fixed
+
+- **n8n — page modules were invisible to ingestion**: a page's `index.html` is
+  reported by `core_course_get_contents` with `mimetype: NULL`, so the
+  `SUPPORTED_MIMES` filter silently skipped every page module and no spoken
+  course content had ever reached the index. Detection now keys on `modname`.
+  Slide PDFs attached to those same page modules are unaffected and continue
+  to ingest.
+- **n8n — a page that loses its video no longer loops forever**: when a page
+  whose transcript had been ingested is edited to remove the embed, the old
+  document is deleted and the stale state entry is now dropped with it.
+  Previously the entry kept the old `timemodified`, so every later run
+  re-classified the page as updated, re-issued the delete and skipped again,
+  never converging — and reported `error: null` while a document was being
+  removed.
+
+### Known limitations
+
+- Transcripts are YouTube's automatic captions, not human-authored subtitles.
+  Proper nouns are frequently mis-transcribed: in the Psicologia generale
+  corpus the neuropsychology case *Phineas Gage* comes through as *"Finess
+  Cage"*, so a student searching the correct spelling will not retrieve that
+  passage. Each document carries a provenance header stating its origin. See
+  `n8n/README.md`.
+- The `ytdlp-api` service refuses to enable its YouTube provider unless a
+  cookie path is configured, even though public-video transcripts need no
+  authentication. `n8n/README.md` documents the placeholder file that
+  satisfies the check.
+
 ## [0.6.0] - 2026-07-18
 
 Diagnostics and inline citations. Pairs with

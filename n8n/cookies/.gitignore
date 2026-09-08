@@ -1,0 +1,3 @@
+# Cookie files are environment-specific and may carry session data.
+*
+!.gitignore
