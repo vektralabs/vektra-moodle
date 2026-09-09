@@ -187,13 +187,25 @@ makes a flip take effect.
       workflow at an echo server for one run
 - [x] Metadata key matches the contract's `^[a-z][a-z0-9_]{0,63}$`
 
-**Blocked downstream, not here**: the running backend does not yet consume the
-field. A well-formed request stores no `hidden_from_students` anywhere, and the
-contract's validation rules are absent — nested objects, non-conforming keys and
-even malformed JSON in `metadata` all return HTTP 200. This matches vektra-stack
-having frozen the contract before opening `feat/source-visibility`. End-to-end
-confirmation that the flag reaches Qdrant needs their half; the workflow side is
-complete and measured.
+**Blocked downstream, not here** — the blocking work is vektra-stack PR #139,
+which consumes and validates the field. It is neither merged nor deployed, so
+every measurement above was taken against a pre-#139 stack. A well-formed
+request stores no `hidden_from_students` anywhere, and the contract's validation
+rules are absent: nested objects, non-conforming keys and even malformed JSON in
+`metadata` all return HTTP 200. End-to-end confirmation that the flag reaches
+Qdrant needs their half; the workflow side is complete and measured.
+
+**E2E acceptance probe, for when #139 is live** (agreed with the coordinating
+session and on their deploy checklist). Against the deployed stack all three
+must return 422, where today they return 200:
+
+- `metadata={"Hidden_From_Students": true}` — key outside `^[a-z][a-z0-9_]{0,63}$`
+- `metadata={"a":{"b":1}}` — nested rather than flat
+- `metadata=non-json` — malformed
+
+and a hidden module's Qdrant points must carry `hidden_from_students` in their
+payload, where today they hold only chunker-generated keys. Nothing on the
+workflow side changes for this to start passing.
 
 ---
 
