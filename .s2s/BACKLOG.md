@@ -155,6 +155,51 @@ processed.
 
 ## Completed
 
+### FEAT-005: Teacher opt-out from the index via a title tag
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-09-08 | **Completed**: 2026-09-08
+**Branch**: `feat/ingest-opt-out-tag`
+**Origin**: meeting point 2 — teachers need a way to keep specific material out of the assistant
+
+**Context**: A teacher had no way to exclude a module from the AI index short of
+unpublishing it in Moodle. A tag in the module title now does it:
+`INGEST_OPT_OUT_TAG`, default `[no-ai]`, matched case-insensitively anywhere in
+the title. Tagging excludes everything the module contributes, documents and
+video transcript alike, because the teacher tags the module rather than a file.
+
+**Implementation**: a single filter in `Extract Files`, placed before the module
+produces any candidate. Deletion needed no new code: `Dedup & Diff` already puts
+anything present in state but absent from the current file list into `toDelete`,
+so an excluded module is removed from the index by the existing delta.
+
+**The non-obvious part**: `Dedup & Diff` suppresses all deletions for a course
+when Moodle returns an empty file list, so an outage cannot wipe the index. A
+teacher tagging every module produces the same empty list, which would have left
+the opted-out material indexed forever — the opt-out failing silently precisely
+when applied most broadly. `Extract Files` now reports `modulesSeen` and
+`modulesExcluded`, and the safety net stands down only when at least one module
+was excluded and every module seen was excluded. The `> 0` guard matters: on the
+empty set, "every module seen was excluded" is vacuously true, and without it a
+real outage would disable the protection it exists for.
+
+**Verified**:
+- [x] Tagging an already-ingested module removes it on the next run: `1 removed,
+      1 opted out`, document soft-deleted, live documents 38 -> 37
+- [x] Untagging restores it on the run after: `1 new`, new document id, 37 -> 38
+- [x] Tagging a page excludes both its transcript and its attached PDF
+- [x] Case-insensitive: `[no-ai]` and `[NO-AI]` both match
+- [x] Empty `INGEST_OPT_OUT_TAG` disables the filter entirely
+- [x] A custom tag is honoured and the default no longer matches
+- [x] Course-wide opt-out still deletes; a Moodle outage still suppresses deletions
+- [x] Zero modules seen, and missing counters, both behave as an outage
+
+**Review**: cross-checked with the coordinating session, which flagged the
+vacuous-truth risk on the empty set. The guard was already present but not
+demonstrated; probes D (zero modules seen), E (counters absent) and F (exclusions
+with a non-empty list) now cover it.
+
+---
+
 ### FEAT-004: YouTube transcript ingestion for the n8n pipeline
 
 **Status**: completed | **Priority**: medium | **Created**: 2026-09-06 | **Completed**: 2026-09-07

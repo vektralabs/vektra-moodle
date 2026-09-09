@@ -19,6 +19,31 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **n8n — teacher opt-out by title tag** (FEAT-005): a module whose title
+  contains `[no-ai]` is excluded from the index. The tag is configurable with
+  `INGEST_OPT_OUT_TAG`, matched case-insensitively anywhere in the title, and
+  an empty value disables the feature. Tagging a module excludes everything it
+  contributes — its documents and, for a page, its video transcript.
+
+  Removal is not merely a skip: a module tagged after it was already ingested
+  is deleted from the index on the next run, and untagging it restores the
+  material on the run after that. The ingestion summary counts excluded modules
+  as `opted out`, separately from the `removed` count of documents actually
+  deleted, so a tag doing its job is distinguishable from a broken extractor.
+
+### Fixed
+
+- **n8n — a course-wide opt-out is no longer mistaken for a Moodle outage**:
+  deletions are suppressed for a course when Moodle returns an empty file list,
+  so an outage cannot wipe the index. Tagging every module in a course produces
+  the same empty list, which would have left the opted-out material indexed
+  forever. `Extract Files` now reports how many modules it saw and excluded, and
+  the safety net stands down only when at least one module was actually
+  excluded and every module seen was excluded — never on the empty set, where
+  the naive test is vacuously true.
+
+### Added
+
 - **n8n — YouTube transcript ingestion** (FEAT-004): lecture videos embedded in
   Moodle page modules are now ingested as transcripts. The workflow collects
   each page's `index.html`, extracts the embedded YouTube id, and fetches

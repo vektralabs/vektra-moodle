@@ -227,6 +227,34 @@ The workflow derives the Vektra namespace from the Moodle course shortname by ap
 
 **Important**: the explicit `course_id` and `namespace` overrides on the block settings are used as-is (no slugification). Only the shortname fallback is slugified. If a course shortname produces an unexpected namespace slug, set an explicit `course_id` override in the block settings.
 
+## Excluding material from the index
+
+A teacher can keep a module out of the AI index by putting a tag in its
+**title**. The default tag is `[no-ai]`, configurable with `INGEST_OPT_OUT_TAG`:
+
+```
+Lezione 3 - Percezione [no-ai]
+[NO-AI] Bozza non revisionata
+```
+
+The match is case-insensitive and looks anywhere in the title, because the
+title is typed by a person. Setting `INGEST_OPT_OUT_TAG=` (empty) disables the
+feature.
+
+It is the **module title**, not the file name. Tagging a module excludes
+everything it contributes: its documents and, for a page, its video transcript.
+
+Removal is not just a skip. A module tagged after it was already ingested is
+deleted from the index on the next run, and untagging it puts it back on the
+run after that. The ingestion summary reports the count as `opted out`, so a
+tag that is working is distinguishable from an extractor that is broken.
+
+One interaction worth knowing: the pipeline suppresses all deletions for a
+course when Moodle returns an empty file list, so an outage cannot wipe the
+index. Tagging every module in a course also produces an empty list, and that
+case is deliberately exempt from the safety net — otherwise a course-wide
+opt-out would be silently ignored.
+
 ## Transcript extraction (YouTube course material)
 
 Course videos embedded in Moodle pages are ingested as transcripts by the
