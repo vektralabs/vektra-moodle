@@ -35,6 +35,12 @@ Convention (Keep a Changelog 1.1.0):
   not tidiness: re-ingesting unchanged content returns `exists` and ignores the
   metadata of that request (measured against the running backend).
 
+  Upgrading is safe in both directions. State written before this change has no
+  visibility recorded, which reads as visible: files whose module is still
+  visible stay unchanged, and files whose module is already hidden read as a
+  flip and migrate through the re-ingest path, acquiring the flag they never
+  had. The second case is the intended migration rather than a side effect.
+
   Modules that are visible but carry availability restrictions (group, date) are
   reported as visible; restriction-aware visibility is out of scope.
 

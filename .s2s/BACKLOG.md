@@ -180,7 +180,12 @@ makes a flip take effect.
 - [x] Hiding a module classifies it `updated` and carries `old_document_id`
 - [x] Un-hiding does the same in reverse
 - [x] No change leaves it `unchanged`
-- [x] Existing state without a `hidden` field causes no spurious re-ingest
+- [x] Legacy state carrying no `hidden` field behaves correctly in both
+      directions: a file whose module is visible stays `unchanged`, so upgrading
+      triggers no spurious re-ingest, while a file whose module is currently
+      hidden reads as a flip (stored false vs reported true), is classified
+      `updated`, and migrates through the re-ingest path — acquiring the flag it
+      never had. The second case is the intended migration, not a side effect
 - [x] On the wire, a hidden module's request carries
       `{"hidden_from_students":true}` in a `metadata` form part, and a visible
       module's request carries no metadata part at all — captured by pointing the
