@@ -19,6 +19,33 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **n8n — module visibility propagated to the ingest API** (FEAT-006): a module
+  hidden in Moodle (`visible = 0`) is still ingested, but the request now carries
+  `hidden_from_students: true` in its `metadata` field, so the backend can use
+  the content without exposing the source. The key is omitted for visible
+  modules, which the backend reads as false. Field name and shape are fixed by
+  the vektra-stack ingest contract; `uservisible` is deliberately not used, since
+  with an admin token it stays true even for hidden modules.
+
+  Visibility is part of change detection: hiding a module touches no file, so
+  `timemodified` alone would classify the flip as unchanged and the document
+  would keep a stale flag indefinitely. The stored state records the visibility
+  each document was ingested with, and a difference marks the file as updated —
+  which deletes the old document before re-ingesting. That delete is required,
+  not tidiness: re-ingesting unchanged content returns `exists` and ignores the
+  metadata of that request (measured against the running backend).
+
+  Upgrading is safe in both directions. State written before this change has no
+  visibility recorded, which reads as visible: files whose module is still
+  visible stay unchanged, and files whose module is already hidden read as a
+  flip and migrate through the re-ingest path, acquiring the flag they never
+  had. The second case is the intended migration rather than a side effect.
+
+  Modules that are visible but carry availability restrictions (group, date) are
+  reported as visible; restriction-aware visibility is out of scope.
+
+### Added
+
 - **n8n — teacher opt-out by title tag** (FEAT-005): a module whose title
   contains `[no-ai]` is excluded from the index. The tag is configurable with
   `INGEST_OPT_OUT_TAG`, matched case-insensitively anywhere in the title, and

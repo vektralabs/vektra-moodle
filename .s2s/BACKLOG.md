@@ -155,6 +155,65 @@ processed.
 
 ## Completed
 
+### FEAT-006: Propagate module visibility to the ingest API
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-09-09 | **Completed**: 2026-09-09
+**Branch**: `feat/ingest-visibility-flag` (stacked on `feat/ingest-opt-out-tag`)
+**Origin**: meeting point 1 — hidden material should be usable by the assistant without its source being shown
+**Contract**: fixed by vektra-stack (Task 2a) — `hidden_from_students` boolean, inside the `metadata` form field as flat JSON, raised on `visible === 0`
+
+**Implementation**: `Extract Files` carries `hidden: mod.visible === 0` on every
+candidate; `Dedup & Diff` puts it in the change signature beside `timemodified`;
+`Process Single File` adds a `metadata` part to the multipart when the module is
+hidden and records the visibility in the state file.
+
+**Why the signature had to change**: hiding a module leaves every file
+byte-identical, so `timemodified` alone reports the flip as unchanged. The
+document would never be re-ingested and its flag would stay stale — the source
+would keep being cited. Re-ingesting without deleting first does not help
+either: measured against the running backend, an unchanged content hash returns
+`status: exists` with the same `document_id` and the request's metadata ignored.
+The `updated` branch deletes the old document before uploading, which is what
+makes a flip take effect.
+
+**Verified**:
+- [x] Hiding a module classifies it `updated` and carries `old_document_id`
+- [x] Un-hiding does the same in reverse
+- [x] No change leaves it `unchanged`
+- [x] Legacy state carrying no `hidden` field behaves correctly in both
+      directions: a file whose module is visible stays `unchanged`, so upgrading
+      triggers no spurious re-ingest, while a file whose module is currently
+      hidden reads as a flip (stored false vs reported true), is classified
+      `updated`, and migrates through the re-ingest path — acquiring the flag it
+      never had. The second case is the intended migration, not a side effect
+- [x] On the wire, a hidden module's request carries
+      `{"hidden_from_students":true}` in a `metadata` form part, and a visible
+      module's request carries no metadata part at all — captured by pointing the
+      workflow at an echo server for one run
+- [x] Metadata key matches the contract's `^[a-z][a-z0-9_]{0,63}$`
+
+**Blocked downstream, not here** — the blocking work is vektra-stack PR #139,
+which consumes and validates the field. It is neither merged nor deployed, so
+every measurement above was taken against a pre-#139 stack. A well-formed
+request stores no `hidden_from_students` anywhere, and the contract's validation
+rules are absent: nested objects, non-conforming keys and even malformed JSON in
+`metadata` all return HTTP 200. End-to-end confirmation that the flag reaches
+Qdrant needs their half; the workflow side is complete and measured.
+
+**E2E acceptance probe, for when #139 is live** (agreed with the coordinating
+session and on their deploy checklist). Against the deployed stack all three
+must return 422, where today they return 200:
+
+- `metadata={"Hidden_From_Students": true}` — key outside `^[a-z][a-z0-9_]{0,63}$`
+- `metadata={"a":{"b":1}}` — nested rather than flat
+- `metadata=non-json` — malformed
+
+and a hidden module's Qdrant points must carry `hidden_from_students` in their
+payload, where today they hold only chunker-generated keys. Nothing on the
+workflow side changes for this to start passing.
+
+---
+
 ### FEAT-005: Teacher opt-out from the index via a title tag
 
 **Status**: completed | **Priority**: medium | **Created**: 2026-09-08 | **Completed**: 2026-09-08
