@@ -155,6 +155,48 @@ processed.
 
 ## Completed
 
+### FEAT-006: Propagate module visibility to the ingest API
+
+**Status**: completed | **Priority**: medium | **Created**: 2026-09-09 | **Completed**: 2026-09-09
+**Branch**: `feat/ingest-visibility-flag` (stacked on `feat/ingest-opt-out-tag`)
+**Origin**: meeting point 1 — hidden material should be usable by the assistant without its source being shown
+**Contract**: fixed by vektra-stack (Task 2a) — `hidden_from_students` boolean, inside the `metadata` form field as flat JSON, raised on `visible === 0`
+
+**Implementation**: `Extract Files` carries `hidden: mod.visible === 0` on every
+candidate; `Dedup & Diff` puts it in the change signature beside `timemodified`;
+`Process Single File` adds a `metadata` part to the multipart when the module is
+hidden and records the visibility in the state file.
+
+**Why the signature had to change**: hiding a module leaves every file
+byte-identical, so `timemodified` alone reports the flip as unchanged. The
+document would never be re-ingested and its flag would stay stale — the source
+would keep being cited. Re-ingesting without deleting first does not help
+either: measured against the running backend, an unchanged content hash returns
+`status: exists` with the same `document_id` and the request's metadata ignored.
+The `updated` branch deletes the old document before uploading, which is what
+makes a flip take effect.
+
+**Verified**:
+- [x] Hiding a module classifies it `updated` and carries `old_document_id`
+- [x] Un-hiding does the same in reverse
+- [x] No change leaves it `unchanged`
+- [x] Existing state without a `hidden` field causes no spurious re-ingest
+- [x] On the wire, a hidden module's request carries
+      `{"hidden_from_students":true}` in a `metadata` form part, and a visible
+      module's request carries no metadata part at all — captured by pointing the
+      workflow at an echo server for one run
+- [x] Metadata key matches the contract's `^[a-z][a-z0-9_]{0,63}$`
+
+**Blocked downstream, not here**: the running backend does not yet consume the
+field. A well-formed request stores no `hidden_from_students` anywhere, and the
+contract's validation rules are absent — nested objects, non-conforming keys and
+even malformed JSON in `metadata` all return HTTP 200. This matches vektra-stack
+having frozen the contract before opening `feat/source-visibility`. End-to-end
+confirmation that the flag reaches Qdrant needs their half; the workflow side is
+complete and measured.
+
+---
+
 ### FEAT-005: Teacher opt-out from the index via a title tag
 
 **Status**: completed | **Priority**: medium | **Created**: 2026-09-08 | **Completed**: 2026-09-08
