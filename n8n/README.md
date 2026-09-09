@@ -227,6 +227,34 @@ The workflow derives the Vektra namespace from the Moodle course shortname by ap
 
 **Important**: the explicit `course_id` and `namespace` overrides on the block settings are used as-is (no slugification). Only the shortname fallback is slugified. If a course shortname produces an unexpected namespace slug, set an explicit `course_id` override in the block settings.
 
+## Hidden modules
+
+A module hidden in Moodle (the eye icon, `visible = 0`) is still ingested, but
+the document is tagged so the backend can use its content without exposing the
+source. The workflow sends `hidden_from_students: true` in the ingest request's
+`metadata` field; for a visible module the key is omitted, which the backend
+reads as false.
+
+Hiding is deliberately not the same as opting out. An opted-out module leaves
+the index entirely (see above); a hidden one stays searchable but should not be
+cited back to students. Use the `[no-ai]` tag when the material must not be used
+at all.
+
+Two things make this work that are easy to get wrong:
+
+- **Visibility is part of change detection.** Hiding a module does not touch any
+  file, so `timemodified` alone would classify the flip as unchanged and the
+  document would keep its stale flag forever. The stored state records the
+  visibility each document was ingested with, and a difference marks the file as
+  updated.
+- **The old document is deleted first.** Re-ingesting unchanged content returns
+  `exists` and ignores the metadata of that request, so without the delete the
+  flag would never change. The `updated` path already deletes before uploading,
+  which is what makes the flip take effect.
+
+Modules that are visible but carry availability restrictions (group, date) are
+reported as visible. Restriction-aware visibility is not covered.
+
 ## Excluding material from the index
 
 A teacher can keep a module out of the AI index by putting a tag in its
