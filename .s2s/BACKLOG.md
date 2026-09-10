@@ -87,48 +87,85 @@ holding one course indexes that course, and no run will ever say it was wrong to
 
 ---
 
-### DEBT-010: Only the first course with files is ingested in a multi-course run
+### DEBT-010: The last course of a run is never processed
 
 **Status**: planned | **Priority**: high | **Created**: 2026-09-10
-**Origin**: surfaced while testing FEAT-010, which finally put two courses with
-files through the pipeline in one run
+**Origin**: surfaced while testing FEAT-010, which finally put more than one
+course with files through the pipeline in a single run
+**Confirmed**: on mooc2 under the schedule trigger, 2026-09-10
 
-**Context**: with two courses in scope, `Dedup & Diff` correctly reported work
-for both — `psicologia-generale` 35 new, `no-vektra-test` 1 new — but
-`Process Single File` ran 36 times and every one of them belonged to the first
-course. The second course's file was never processed. `Merge Course Results`
-then emitted two items, the second containing the first course's 35 results
-again, so `Ingestion Summary` reported 70 skipped instead of 35.
+**What happens**: whichever course `Loop Courses` handles last does not get its
+files ingested. Everything before it is processed correctly.
+
+Measured on mooc2, scoped workflow active, fired by cron rather than the CLI.
+Counts are Qdrant chunks per namespace, which is the authority:
+
+| Course | Block | Expected | Result |
+|---|---|---|---|
+| 2 test-corso | yes | ingested | 24 chunks |
+| 3 abilitazione-insegnamento | no | pruned | 0 — correct |
+| 4 psicologia-generale | yes | ingested | 516 chunks |
+| 5 storia-ambiente | no | pruned | 0 — correct |
+| 6 psicologia-generale-hybrid | **yes** | ingested | **0 — never ingested** |
+
+Course 6 carries the block, has 36 modules with content, all visible, and is
+absent from the n8n state file as well as from the index. It is also last.
 
 **Not caused by FEAT-010**: the same run on the pre-change workflow from
-`develop` produced identical numbers — same 36 executions, same missing file,
-same doubled count. The scoping change only decides which courses enter the
-loop.
+`develop` produced identical numbers — same executions, same missing course,
+same doubled summary. The scoping change only decides which courses enter the
+loop. What it did change is that multi-course runs are now the normal case, so a
+defect that was always there is now reached every run.
 
-**Likely cause**: `Loop Files` is a `splitInBatches` node that keeps its state
-for the whole execution. Once its loop has completed for the first course it
-reports done immediately for the next one, so the second course's items are
-never iterated and its `Merge Course Results` collects the previous course's
-output. `splitInBatches` has a reset option for exactly this.
+**Corrected diagnosis**: this entry first read "only the first course is
+ingested", from a two-course CLI run where the first was processed and the
+second was not. With five courses the pattern resolves differently and the
+earlier reading was wrong: it is not the first course that survives, it is
+every course except the last that does. A two-course run cannot tell the two
+apart.
 
-**What is not yet known, and matters**: whether this reproduces under the
-schedule trigger or only under `n8n execute` on the CLI, which is how it was
-observed. The evidence points at the CLI being a factor rather than the cause:
-the server holds documents for `abilitazione-insegnamento` and
-`storia-ambiente` alongside `psicologia-generale`, so more than one course has
-been ingested there at some point. That must be established before the fix, or
-the fix will be aimed at the wrong thing.
+**Where it is not**: the deletion path is unaffected — courses 3 and 5 were
+pruned correctly, from positions in the middle of the run, and the empty-course
+safety net did not fire on any course. So it is specific to the ingestion
+sub-branch, `Split Files` → `Loop Files` → `Process Single File`, and only on
+the final iteration of the outer loop.
 
-**Why it matters**: if it does reproduce on a schedule, then on any Moodle with
-more than one scoped course only one of them is ever indexed, silently, and the
-summary's numbers hide it by double-counting. FEAT-010 makes multi-course runs
-the normal case rather than the exception.
+**Likely cause**: `Loop Courses` emits on its *done* output as soon as the last
+batch is dispatched, which reaches `Ingestion Summary` and finishes the
+execution while the inner `Loop Files` is still iterating that last course.
+Nested `splitInBatches` loops are a known hazard in exactly this shape. The
+earlier guess — inner-loop state retained across courses — is ruled out by
+course 4 ingesting 516 chunks after course 2 had already run its inner loop.
+
+**Why it matters**: on a Moodle with N scoped courses, the Nth is never indexed,
+silently, and no error is raised. Which course that is depends on the order
+`core_course_get_courses` returns, so it can move.
+
+**Exactly when it bites**: only when the course the loop handles last is both in
+scope and has files to ingest. The `mooc.unical.it` deploy showed the harmless
+case — 49 courses, one of them scoped (`psicologia-generale-alma`, id 42, not
+last), so the course that fell off the end was out of scope and nothing was
+lost. On mooc2 it showed the harmful one: course 6 carried the block and was
+last, and its 36 modules were never indexed.
+
+That makes the exposure narrow but sharp, and it moves on its own — the order
+comes from whatever `core_course_get_courses` returns, so a course that is safe
+today becomes the lost one as soon as a course is added, removed, or given the
+block. It cannot be relied on.
+
+**Not blocking the demo**, which runs on `psicologia-generale` and is fully
+indexed. A short-term mitigation, if one is wanted before the fix: a course that
+must not be missed should not be last in that order.
 
 **Acceptance criteria**:
-- [ ] Reproduced (or ruled out) under the schedule trigger, not only the CLI
-- [ ] Every scoped course's files are processed in a single run
+- [x] Reproduced under the schedule trigger, not only the CLI
+- [ ] The last course of a run is ingested like every other
 - [ ] `Ingestion Summary` counts each file once
-- [ ] A probe covers a two-course run where both courses have files to ingest
+- [ ] A probe covers a run of at least three courses where the last one has
+      files to ingest, since two courses cannot distinguish first-survives from
+      last-is-lost
+
+---
 
 ### DEBT-009: The mooc.unical.it ingestion token is bound to a personal account
 
@@ -245,6 +282,14 @@ answered from video transcripts alone and nobody could have said why.
 
 The server was checked and is aligned — 87 of 87 document ids present — so this
 is not an incident. It is a class of failure the pipeline cannot detect.
+
+**Seen again on the server**, in the other direction, during the
+`mooc.unical.it` scoping deploy: `psicologia-generale-alma` already held 109
+chunks in Qdrant while the instance's state file had no record of the course at
+all. The index was ahead of the state rather than behind it, which the pipeline
+notices just as little — it would have re-ingested all 36 files as new. The
+scoped run has since realigned the two. Two sightings, opposite directions, same
+blind spot.
 
 **Repaired locally** by removing the state entries whose document id no longer
 resolved and letting the next run re-ingest them. That is the right remedy, but
