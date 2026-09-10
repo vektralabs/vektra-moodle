@@ -20,6 +20,51 @@
 
 ## Planned
 
+### DEBT-010: Only the first course with files is ingested in a multi-course run
+
+**Status**: planned | **Priority**: high | **Created**: 2026-09-10
+**Origin**: surfaced while testing FEAT-008, which finally put two courses with
+files through the pipeline in one run
+
+**Context**: with two courses in scope, `Dedup & Diff` correctly reported work
+for both — `psicologia-generale` 35 new, `no-vektra-test` 1 new — but
+`Process Single File` ran 36 times and every one of them belonged to the first
+course. The second course's file was never processed. `Merge Course Results`
+then emitted two items, the second containing the first course's 35 results
+again, so `Ingestion Summary` reported 70 skipped instead of 35.
+
+**Not caused by FEAT-008**: the same run on the pre-change workflow from
+`develop` produced identical numbers — same 36 executions, same missing file,
+same doubled count. The scoping change only decides which courses enter the
+loop.
+
+**Likely cause**: `Loop Files` is a `splitInBatches` node that keeps its state
+for the whole execution. Once its loop has completed for the first course it
+reports done immediately for the next one, so the second course's items are
+never iterated and its `Merge Course Results` collects the previous course's
+output. `splitInBatches` has a reset option for exactly this.
+
+**What is not yet known, and matters**: whether this reproduces under the
+schedule trigger or only under `n8n execute` on the CLI, which is how it was
+observed. The evidence points at the CLI being a factor rather than the cause:
+the server holds documents for `abilitazione-insegnamento` and
+`storia-ambiente` alongside `psicologia-generale`, so more than one course has
+been ingested there at some point. That must be established before the fix, or
+the fix will be aimed at the wrong thing.
+
+**Why it matters**: if it does reproduce on a schedule, then on any Moodle with
+more than one scoped course only one of them is ever indexed, silently, and the
+summary's numbers hide it by double-counting. FEAT-008 makes multi-course runs
+the normal case rather than the exception.
+
+**Acceptance criteria**:
+- [ ] Reproduced (or ruled out) under the schedule trigger, not only the CLI
+- [ ] Every scoped course's files are processed in a single run
+- [ ] `Ingestion Summary` counts each file once
+- [ ] A probe covers a two-course run where both courses have files to ingest
+
+---
+
 ### DEBT-003: Credentials travel in cleartext between the ingestion containers
 
 **Status**: planned | **Priority**: medium | **Created**: 2026-09-08
@@ -154,6 +199,70 @@ processed.
 ---
 
 ## Completed
+
+### FEAT-008: Index only the courses that carry the Vektra block
+
+**Status**: completed | **Priority**: high | **Created**: 2026-09-10 | **Completed**: 2026-09-10
+**Branch**: `feat/ingest-scope-by-block`
+**Origin**: the pipeline indexed every course; on `mooc.unical.it` that is ~50
+courses, the whole university
+
+**Context**: `Filter Courses` excluded only the site course, so every course on
+the installation was ingested. The wanted model is self-service: a teacher adds
+the Vektra block to a course and its material is indexed on the next run; they
+remove the block and it comes out. The namespace list on the engine side is not
+a usable signal — ingest and token creation both create namespaces — so the
+signal has to come from Moodle, and the block is it.
+
+**Implementation**: two nodes between `Filter Courses` and `Loop Courses`.
+`Get Course Blocks` calls `core_block_get_course_blocks` once per course;
+`Scope Courses` decides what happens to each. A course with its own block passes
+through unchanged. A course with no block that is not in the index is dropped
+and costs nothing further. A course with no block that **is** in the index is
+marked `_outOfScope` and travels the normal deletion path. A course whose lookup
+failed is left out of the run entirely.
+
+Two existing nodes needed one line each: `Extract Files` returns an empty file
+list for an `_outOfScope` course, and `Dedup & Diff` exempts it from the
+empty-course safety net, the same way the opt-out tag is exempt.
+
+**The finding that shaped it**: filtering a course out does not remove it from
+the index — it freezes it. `Dedup & Diff` runs per course, so a course that
+never reaches `Loop Courses` is never compared against the state and never
+produces deletions. Its stale index would keep answering students forever.
+"Remove the block and it comes out" therefore had to be written, not assumed.
+
+**Two ways the signal can lie, both handled**:
+- A block placed on the site or a category with *show in subcontexts* is
+  reported under every course beneath it. Measured: a block inserted in the
+  system context made a course with no block of its own report `vektra`. It is
+  distinguishable because the inherited instance id is the same under every
+  course, while a per-course block's id is unique to its course.
+- Moodle answers a web-service exception with HTTP 200 and an `exception` body.
+  Read as "no block", a failing token would prune every course at once. This is
+  not hypothetical: the `mooc.unical.it` token belongs to a person's account
+  (see DEBT-009), so all lookups can start failing together.
+
+**Verified**: 27 logic probes (`Scope Courses`, `Dedup & Diff`, `Extract Files`,
+`Ingestion Summary`), plus three runs on the live local stack:
+- two courses, one with the block — only that one entered the loop, the other
+  was dropped, nothing was deleted
+- the same two with the block added to the second — both entered scope
+- the block removed from the second while its document was in the index — the
+  document was deleted from Vektra (`deleted_at` set, `deletion_reason
+  user_request`), its state entry dropped, the empty-course net did not fire,
+  and the summary reported `1 course(s) left the index`
+
+The response contract was confirmed on Moodle 5.1.3 locally, on mooc2 (5.1.4) by
+the ops session, and for `mooc.unical.it` (4.3.3) by diffing
+`blocks/classes/external.php` between `MOODLE_403_STABLE` and 5.1 — the file is
+identical, so the `name` field carries the same value there.
+
+**Deployment prerequisite**: `core_block_get_course_blocks` must be added to the
+`n8n Ingestion` web service on each instance. The service id differs between
+installations (2 on one, 3 on the other).
+
+---
 
 ### FEAT-007: One workflow template for several Moodle instances
 
