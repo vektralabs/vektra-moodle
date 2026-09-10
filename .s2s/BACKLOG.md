@@ -35,8 +35,15 @@ from cardinality: an instance id seen under more than one course is inherited.
 **Where the inference fails**: a category holding exactly **one** course. Its
 inherited block is seen once, is indistinguishable from that course's own block,
 and the course is indexed when it should not be. A lookup that fails elsewhere
-can also push a genuinely inherited block down to one sighting. The workflow
-logs when the usable set is that small, but it cannot decide.
+can also push a genuinely inherited block down to one sighting.
+
+**Narrowed, not closed**: the courses returned by `core_course_get_courses`
+carry `categoryid`, so the run can tell exactly which courses are alone in their
+category — the precise set where a single sighting stops being evidence — and
+logs each by name. Those courses are still indexed, because refusing them would
+break every course legitimately alone in its category, but the doubt is now a
+named line in the log rather than an invisible one. Deciding it still needs the
+data below.
 
 **Blast radius**: one course indexed that should not be — against the whole
 installation the test does catch. Not a reason to leave it: on an ateneo Moodle

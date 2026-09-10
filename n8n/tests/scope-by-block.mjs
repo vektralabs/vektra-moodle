@@ -137,6 +137,30 @@ check('blocco proprio + ereditato: vince il proprio', () => {
   eq(names(out), ['c']);
 });
 
+check('corso solo nella sua categoria: viene indicizzato ma segnalato', () => {
+  const { out, logs } = scope(
+    [{ id: 12, shortname: 'analisi-2', categoryid: 7 }], [okBody([44])]);
+  eq(names(out), ['analisi-2'], 'va comunque indicizzato, non bloccato:');
+  if (!logs.some(l => l.includes('only course in its category')))
+    throw new Error('nessun avviso sul corso ambiguo');
+  if (!logs.some(l => l.includes('could not be told apart')))
+    throw new Error('il riepilogo non riporta il conteggio ambiguo');
+});
+
+check('corso con altri nella stessa categoria: nessun avviso', () => {
+  const { out, logs } = scope(
+    [{ id: 12, shortname: 'analisi-2', categoryid: 7 }, { id: 13, shortname: 'fisica-1', categoryid: 7 }],
+    [okBody([44]), emptyBody()]);
+  eq(names(out), ['analisi-2']);
+  if (logs.some(l => l.includes('only course in its category')))
+    throw new Error('avviso non richiesto: la categoria ne ha due');
+});
+
+check('corso senza categoryid non manda in errore il conteggio', () => {
+  const { out } = scope([{ id: 12, shortname: 'analisi-2' }], [okBody([44])]);
+  eq(names(out), ['analisi-2']);
+});
+
 check('blocco di un altro plugin non conta', () => {
   const { out } = scope([{ id: 2, shortname: 'a' }],
     [{ statusCode: 200, body: { blocks: [{ instanceid: 1, name: 'html' }, { instanceid: 2, name: 'calendar_month' }], warnings: [] } }]);

@@ -357,6 +357,21 @@ it. The blast radius is one course indexed that should not be, against the whole
 installation the test does catch; DEBT-011 carries the proper fix, which needs
 the plugin to report block ownership itself.
 
+What the workflow can do, and does, is **name the courses where the doubt
+applies**. A course alone in its category is precisely where a single sighting
+stops being evidence, so each one is logged by name:
+
+```
+[Scope Courses] course 12 (analisi-2) is the only course in its category.
+If its Vektra block sits on the category rather than on the course, it is
+being indexed by mistake — check where the block is.
+```
+
+The course is still indexed — refusing it would break every course that is
+legitimately alone in its category — but the doubt is now a line in the run log
+with a course number on it, which takes a moment to settle, instead of a
+paragraph in this file that nobody reads at the right time.
+
 So the operational rule is not merely tidiness: **put the block on the course**.
 
 ### A failed lookup never removes anything
