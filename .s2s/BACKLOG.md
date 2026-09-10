@@ -20,6 +20,57 @@
 
 ## Planned
 
+### DEBT-008: Deleting one file removes a document another file still needs
+
+**Status**: planned | **Priority**: high | **Created**: 2026-09-10
+
+**Context**: Vektra deduplicates on content hash. Two ingests of identical
+content in one namespace return the same `document_id` — the second comes back
+`status: exists` carrying the first one's id (measured). When the same file is
+attached to two Moodle modules, both state entries therefore point at one
+document.
+
+This is not hypothetical. Measured on the server:
+
+| Namespace | State entries | Distinct ids | Shared |
+|---|---|---|---|
+| psicologia-generale | 72 | 36 | 36 |
+| abilitazione-insegnamento | — | — | 20 |
+| storia-ambiente | — | — | 24 (one shared by three) |
+
+Every file in psicologia-generale sits under two module ids: `mod70` and
+`mod228` are both `scienza-della-psicologia-1.pdf`.
+
+**The failure**: `Handle Deletions` deletes by `document_id`. Remove one of the
+two files from Moodle and the delete removes the document the *other* entry
+still references. The surviving file is then indexed nowhere, and it will never
+be re-ingested: its `timemodified` has not changed, so every later run reports it
+`unchanged`.
+
+Silent, permanent, and triggered by an ordinary teacher action — unlinking a file
+from one of two modules.
+
+It is the same end state as DEBT-007, reached by a different road: there, the
+index lost documents the state believed in; here, the pipeline deletes them
+itself.
+
+**Likely remedy**: before deleting, check whether any other entry in the same
+namespace's state still references that `document_id`, and drop only the state
+entry when one does. That keeps the document for the survivor and costs a lookup
+in memory. It needs care in the opposite direction too — the last referrer must
+still trigger a real delete.
+
+**Not urgent, but not safe to forget**: nothing triggers it until a file is
+removed from one module while remaining in another. The count of exposed
+documents grows with every course added.
+
+**Acceptance criteria**:
+- [ ] Removing one of two files sharing a document leaves the survivor indexed
+- [ ] Removing the last file referencing a document still deletes it from Vektra
+- [ ] A probe covers both directions, using the shared-id shape seen on the server
+
+---
+
 ### DEBT-007: The pipeline never reconciles its state file against the index
 
 **Status**: planned | **Priority**: medium | **Created**: 2026-09-10
