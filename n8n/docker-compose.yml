@@ -18,6 +18,15 @@ services:
       - INGEST_CRON=${INGEST_CRON:-*/5 * * * *}
       - DELETION_SAFETY_THRESHOLD=${DELETION_SAFETY_THRESHOLD:-3}
       - INGEST_OPT_OUT_TAG=${INGEST_OPT_OUT_TAG:-[no-ai]}
+      # Instance identity, read by the workflow's Config node. The main instance
+      # keeps a default so it works out of the box; a second instance must declare
+      # its own, because the Config node refuses to run without a state path
+      # rather than fall back to a shared file and delete another instance's
+      # documents. Distinct names are required: n8n env is per-process.
+      - STATE_FILE_PATH=${STATE_FILE_PATH:-/home/node/.n8n/moodle-ingest-state.json}
+      - MOOC_MOODLE_URL=${MOOC_MOODLE_URL:-}
+      - MOOC_MOODLE_WS_TOKEN=${MOOC_MOODLE_WS_TOKEN:-}
+      - MOOC_STATE_FILE_PATH=${MOOC_STATE_FILE_PATH:-}
       - YTDLP_API_URL=${YTDLP_API_URL:-http://ytdlp-api:8000}
       - YTDLP_API_KEY=${YTDLP_API_KEY}
       - YTDLP_TRANSCRIPT_LANG=${YTDLP_TRANSCRIPT_LANG:-it}
