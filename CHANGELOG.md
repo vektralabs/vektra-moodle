@@ -19,6 +19,37 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **n8n — one template, many Moodle instances** (FEAT-007): instance identity
+  moved into a `Config` node at the head of the workflow, and the JSON to import
+  is generated per instance from a single template
+  (`node n8n/scripts/build-instance.mjs <instance>`). The generated workflows are
+  identical except that node, so a change applies to every instance instead of
+  being hand-merged into each. Instances are declared in `n8n/instances/`.
+
+  This exists because the second Moodle, `mooc.unical.it`, had drifted months
+  behind on a hand-maintained copy: missing three features and hardcoding both
+  its web-service token and its state path.
+
+### Changed
+
+- **The workflow no longer defaults its state path.** `Config` refuses to start
+  when the path is absent instead of falling back to a shared default. Two
+  workflows on one state file each see the other's documents as present in state
+  but absent from Moodle, delete them from the index, and re-ingest them on the
+  next run — a loop the empty-course guard cannot catch, because neither file
+  list is ever empty. `STATE_FILE_PATH` now has a default in
+  `docker-compose.yml` so the existing instance is unaffected; a second instance
+  must declare its own.
+
+### Security
+
+- **The second instance's web-service token leaves the workflow.** It was
+  hardcoded in three nodes, which put it in the n8n database, in every export and
+  in every backup. `Config` reads it from the environment, as the main instance
+  already did.
+
+### Added
+
 - **n8n — module visibility propagated to the ingest API** (FEAT-006): a module
   hidden in Moodle (`visible = 0`) is still ingested, but the request now carries
   `hidden_from_students: true` in its `metadata` field, so the backend can use
