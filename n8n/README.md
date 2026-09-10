@@ -227,6 +227,57 @@ The workflow derives the Vektra namespace from the Moodle course shortname by ap
 
 **Important**: the explicit `course_id` and `namespace` overrides on the block settings are used as-is (no slugification). Only the shortname fallback is slugified. If a course shortname produces an unexpected namespace slug, set an explicit `course_id` override in the block settings.
 
+## Running more than one Moodle
+
+One n8n can drive several Moodle instances from the same pipeline. There is a
+single workflow template in this repository, `n8n/workflows/moodle-ingest.json`,
+and no per-instance copies: two copies of the same pipeline drift, which is how
+`mooc.unical.it` ended up months behind, missing three features and hardcoding a
+state path.
+
+Each instance is one small file under `n8n/instances/`, and the JSON to import is
+generated from the template:
+
+```bash
+node n8n/scripts/build-instance.mjs mooc > /tmp/mooc.json
+# The container mounts only n8n_data at /home/node/.n8n, so the host's /tmp is
+# not visible inside it. Copy the file in, or the import fails on a missing path.
+docker compose cp /tmp/mooc.json n8n:/tmp/mooc.json
+docker compose exec -T n8n n8n import:workflow --input=/tmp/mooc.json
+docker compose exec -T n8n n8n publish:workflow --id=<id from the instance file>
+docker compose restart n8n
+```
+
+Importing over an active workflow **deactivates it** — the publish step is not
+optional, and n8n needs restarting for the change to take effect.
+
+The generated workflows are identical except one node, `Config`, which reads the
+instance's variables. Adding an instance means adding its file and its variables,
+never editing the pipeline.
+
+### Why the variables are prefixed
+
+n8n environment variables are per process, so two workflows in one n8n cannot
+read different values from the same name. The main instance uses `MOODLE_URL`,
+`MOODLE_WS_TOKEN` and `STATE_FILE_PATH`; a second instance uses the same names
+with a prefix, for example `MOOC_MOODLE_URL`. `INGEST_OPT_OUT_TAG` is
+deliberately not prefixed: the tag is a convention taught to teachers and should
+read the same across every Moodle of the same university.
+
+### The state path is the dangerous one
+
+`Config` refuses to start without a state path rather than falling back to a
+default. That is deliberate. Two workflows sharing one state file each see the
+other instance's documents as present in state but absent from Moodle, classify
+them `removed`, and delete them from the index — then re-ingest them on the next
+run, in a loop. The empty-course guard never catches it, because neither file
+list is ever empty.
+
+So each instance's state path must be distinct, and on an existing instance it
+must point at the file that instance **already uses**. Pointing it somewhere new
+is not an error the pipeline can detect: it simply looks like an empty index and
+re-ingests everything.
+
 ## Hidden modules
 
 A module hidden in Moodle (the eye icon, `visible = 0`) is still ingested, but

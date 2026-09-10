@@ -155,6 +155,48 @@ processed.
 
 ## Completed
 
+### FEAT-007: One workflow template for several Moodle instances
+
+**Status**: completed | **Priority**: high | **Created**: 2026-09-10 | **Completed**: 2026-09-10
+**Branch**: `feat/ingest-instance-config`
+**Origin**: deploy of FEAT-005/006 surfaced a second, drifted workflow on the server
+
+**Context**: `mooc.unical.it` runs the same pipeline as a hand-maintained copy.
+It had fallen months behind — missing FEAT-004, FEAT-005 and FEAT-006, though it
+carried every bugfix — and hardcoded its web-service token and its state path.
+Copying the template over it by hand would have delivered the features and set up
+the next divergence.
+
+**Implementation**: a `Config` node at the head holds instance identity, read
+from the environment; six nodes read from it instead of `$env` or literals.
+Instances are one small file each under `n8n/instances/`, and
+`n8n/scripts/build-instance.mjs` emits the JSON to import. There are no
+per-instance JSONs in the repository, so they cannot go stale.
+
+**The finding that shaped it**: the two workflows differ in four configuration
+points, not the three that were visible. The fourth is the state file path, and
+it is the dangerous one. Importing the template into the second instance would
+have pointed both at one state file: each run classifies the other instance's
+documents as removed, deletes them, and re-ingests them next run. The
+empty-course guard cannot catch it — it only fires on an empty file list, and
+neither list is ever empty. `Config` therefore refuses to start without a state
+path rather than defaulting.
+
+**Verified**:
+- [x] Generated main and mooc differ in exactly one node, `Config`; connections identical
+- [x] Neither output contains a token, a hardcoded host, or a hardcoded state path
+- [x] mooc reads `MOOC_`-prefixed variables and none of the unprefixed ones, so the two cannot collide
+- [x] `INGEST_OPT_OUT_TAG` stays unprefixed by design — a convention taught to teachers
+- [x] `Config` fails with a named error for each of the three required variables
+- [x] The full probe harness passes against the refactored template: no behavioural change
+
+**Not verified here**: the generated mooc workflow has never run. Deployment and
+the first run belong to whoever has VM access. That first run is heavy — mooc has
+never collected page modules, so it downloads every video transcript from
+scratch.
+
+---
+
 ### FEAT-006: Propagate module visibility to the ingest API
 
 **Status**: completed | **Priority**: medium | **Created**: 2026-09-09 | **Completed**: 2026-09-09

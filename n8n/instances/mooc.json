@@ -1,0 +1,6 @@
+{
+  "id": "2c5167b8282b48bdMooc",
+  "name": "Moodle-to-Vektra Ingestion — mooc.unical.it",
+  "envPrefix": "MOOC_",
+  "comment": "Second Moodle. Reads MOOC_MOODLE_URL, MOOC_MOODLE_WS_TOKEN and MOOC_STATE_FILE_PATH: n8n env is per-process, so two workflows in one n8n need distinct names. MOOC_STATE_FILE_PATH must point at the file this instance already uses, /home/node/.n8n/moodle-ingest-state-mooc.json, or its whole index is re-ingested."
+}
