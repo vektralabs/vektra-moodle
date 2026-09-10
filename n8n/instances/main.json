@@ -1,0 +1,6 @@
+{
+  "id": "1YBFqUAPN97mbAf3",
+  "name": "Moodle-to-Vektra Automatic Ingestion",
+  "envPrefix": "",
+  "comment": "The original instance. No prefix, so it reads the same variables it always has: MOODLE_URL, MOODLE_WS_TOKEN, STATE_FILE_PATH."
+}
