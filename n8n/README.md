@@ -131,10 +131,14 @@ and vektra-moodle are running first, otherwise startup will fail.
 > **Upgrading from n8n 1.x**: if you previously activated this workflow on
 > n8n 1.x and upgraded the container to 2.x, the schedule trigger will not
 > fire until the workflow is explicitly published under the new state model.
-> n8n 2.x removed the `n8n publish:workflow` CLI subcommand; use one of:
+> Publish it in any of these ways:
 >
-> - **UI** (simplest): open the workflow in the n8n editor and click **Publish**.
-> - **REST API** (programmatic):
+> - **CLI**: `docker compose exec -T n8n n8n publish:workflow --id=<workflow-id>`,
+>   then restart n8n — the command says so itself. Verified on 2.17.2. An earlier
+>   note here claimed 2.x had removed this subcommand; it exists and is the path
+>   the deploy procedure uses.
+> - **UI**: open the workflow in the n8n editor and click **Publish**.
+> - **REST API**:
 >   ```bash
 >   curl --request="PATCH" "http://localhost:5678/api/v1/workflows/<workflow-id>/activate" \
 >     --header="X-N8N-API-KEY: <your-n8n-api-key>"

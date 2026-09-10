@@ -1,4 +1,4 @@
-// Probes for the course-scoping logic (FEAT-008) and the nodes it touches.
+// Probes for the course-scoping logic (FEAT-010) and the nodes it touches.
 //
 //   node n8n/tests/scope-by-block.mjs
 //
@@ -9,7 +9,7 @@
 // supposed to have rather than against a copy that drifts.
 //
 // Nothing here touches Moodle, Vektra or n8n. The end-to-end runs that do are
-// recorded in .s2s/BACKLOG.md under FEAT-008.
+// recorded in .s2s/BACKLOG.md under FEAT-010.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

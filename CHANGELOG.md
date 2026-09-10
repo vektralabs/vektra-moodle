@@ -19,7 +19,7 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
-- **n8n — only courses with the Vektra block are indexed** (FEAT-008): the
+- **n8n — only courses with the Vektra block are indexed** (FEAT-010): the
   pipeline asks Moodle which blocks each course carries and indexes only those
   with the Vektra block, instead of every course on the installation. Adding the
   block to a course indexes its material on the next run; removing the block

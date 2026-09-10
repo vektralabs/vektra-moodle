@@ -25,7 +25,7 @@
 **Status**: planned | **Priority**: medium | **Created**: 2026-09-10
 **Origin**: CodeRabbit review of PR #35 (Security & Privacy, Major)
 
-**Context**: FEAT-008 decides whether a course carries the Vektra block from
+**Context**: FEAT-010 decides whether a course carries the Vektra block from
 `core_block_get_course_blocks`, which reports a block inherited from a site or
 category context under every course beneath it. The response carries no parent
 context — `instanceid`, `name`, `region`, `positionid`, `collapsible`,
@@ -60,7 +60,7 @@ requests a run on `mooc.unical.it`.
 That means shipping a plugin version before the workflow can rely on it, so the
 inference stays as the fallback for installations running an older plugin.
 
-**Risk accepted to ship FEAT-008**: the review thread on PR #35 was resolved by
+**Risk accepted to ship FEAT-010**: the review thread on PR #35 was resolved by
 hand rather than by a fix, deliberately and on the record. CodeRabbit's closing
 position is the correct one and is quoted here so nobody has to reconstruct it:
 
@@ -90,7 +90,7 @@ holding one course indexes that course, and no run will ever say it was wrong to
 ### DEBT-010: Only the first course with files is ingested in a multi-course run
 
 **Status**: planned | **Priority**: high | **Created**: 2026-09-10
-**Origin**: surfaced while testing FEAT-008, which finally put two courses with
+**Origin**: surfaced while testing FEAT-010, which finally put two courses with
 files through the pipeline in one run
 
 **Context**: with two courses in scope, `Dedup & Diff` correctly reported work
@@ -100,7 +100,7 @@ course. The second course's file was never processed. `Merge Course Results`
 then emitted two items, the second containing the first course's 35 results
 again, so `Ingestion Summary` reported 70 skipped instead of 35.
 
-**Not caused by FEAT-008**: the same run on the pre-change workflow from
+**Not caused by FEAT-010**: the same run on the pre-change workflow from
 `develop` produced identical numbers — same 36 executions, same missing file,
 same doubled count. The scoping change only decides which courses enter the
 loop.
@@ -121,7 +121,7 @@ the fix will be aimed at the wrong thing.
 
 **Why it matters**: if it does reproduce on a schedule, then on any Moodle with
 more than one scoped course only one of them is ever indexed, silently, and the
-summary's numbers hide it by double-counting. FEAT-008 makes multi-course runs
+summary's numbers hide it by double-counting. FEAT-010 makes multi-course runs
 the normal case rather than the exception.
 
 **Acceptance criteria**:
@@ -130,6 +130,262 @@ the normal case rather than the exception.
 - [ ] `Ingestion Summary` counts each file once
 - [ ] A probe covers a two-course run where both courses have files to ingest
 
+### DEBT-009: The mooc.unical.it ingestion token is bound to a personal account
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+**Surfaced by**: token verification for the scoping feature (block-detection)
+
+**Context**: the web-service token n8n uses to read `mooc.unical.it` belongs to a
+**named person's Moodle account** (userid 3, site admin), not a dedicated service
+account. On mooc2 the equivalent token belongs to the generic `admin`. Measured
+while verifying token identity before the scoping work — not assumed.
+
+A token inherits the identity and capabilities of its user. Bound to a person,
+it dies the day that account is disabled, suspended, has its tokens revoked on a
+password reset, or is deleted — and ingestion then **stops with no error**, the
+same silent-failure shape as DEBT-007. It also attributes every automated read
+to that person in the audit trail.
+
+**Pre-existing, and not yet live**: the token was created this way before the
+scoping change; enabling `core_block_get_course_blocks` did not introduce it. The
+mooc workflow is not deployed (waiting on the scoping feature), so the token is
+not in production use. The risk becomes real at mooc go-live.
+
+**Remedy**: create a dedicated Moodle service account (e.g. `vektra-bot`),
+generate the token from it, and repoint `MOOC_MOODLE_WS_TOKEN`. The catch: the
+account must **keep** the capability to see hidden courses and modules
+(`moodle/course:viewhiddencourses` and the view-hidden-activity capability the
+service's functions require) — a locked-down account without them would silently
+stop ingesting hidden material, breaking FEAT-006 (meeting point 1). So it is a
+service account scoped to the ingestion functions, not a minimal one. Documented
+in the install guide (`guida-installazione-vektra-moodle.md` §3.5).
+
+**Acceptance criteria**:
+- [ ] A dedicated Moodle service account owns the token used for `mooc.unical.it` ingestion
+- [ ] The account retains the capabilities the four WS functions need, including reading hidden courses and activities
+- [ ] The personal-account token is revoked
+- [ ] Any other production instance is checked for the same pattern
+
+---
+
+### DEBT-008: Deleting one file removes a document another file still needs
+
+**Status**: planned | **Priority**: high | **Created**: 2026-09-10
+
+**Context**: Vektra deduplicates on content hash. Two ingests of identical
+content in one namespace return the same `document_id` — the second comes back
+`status: exists` carrying the first one's id (measured). When the same file is
+attached to two Moodle modules, both state entries therefore point at one
+document.
+
+This is not hypothetical. Measured on the server:
+
+| Namespace | State entries | Distinct ids | Shared |
+|---|---|---|---|
+| psicologia-generale | 72 | 36 | 36 |
+| abilitazione-insegnamento | — | — | 20 |
+| storia-ambiente | — | — | 24 (one shared by three) |
+
+Every file in psicologia-generale sits under two module ids: `mod70` and
+`mod228` are both `scienza-della-psicologia-1.pdf`.
+
+**The failure**: `Handle Deletions` deletes by `document_id`. Remove one of the
+two files from Moodle and the delete removes the document the *other* entry
+still references. The surviving file is then indexed nowhere, and it will never
+be re-ingested: its `timemodified` has not changed, so every later run reports it
+`unchanged`.
+
+Silent, permanent, and triggered by an ordinary teacher action — unlinking a file
+from one of two modules.
+
+It is the same end state as DEBT-007, reached by a different road: there, the
+index lost documents the state believed in; here, the pipeline deletes them
+itself.
+
+**Likely remedy**: before deleting, check whether any other entry in the same
+namespace's state still references that `document_id`, and drop only the state
+entry when one does. That keeps the document for the survivor and costs a lookup
+in memory. It needs care in the opposite direction too — the last referrer must
+still trigger a real delete.
+
+**Not urgent, but not safe to forget**: nothing triggers it until a file is
+removed from one module while remaining in another. The count of exposed
+documents grows with every course added.
+
+**Acceptance criteria**:
+- [ ] Removing one of two files sharing a document leaves the survivor indexed
+- [ ] Removing the last file referencing a document still deletes it from Vektra
+- [ ] A probe covers both directions, using the shared-id shape seen on the server
+
+---
+
+### DEBT-007: The pipeline never reconciles its state file against the index
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+
+**Context**: change detection asks one question — has `timemodified` moved since
+the state file recorded it — and never asks whether the document it claims to
+have ingested still exists in Vektra. Anything that removes documents on the
+Vektra side is therefore invisible: a reset, a migration, a restore from an
+older backup, a namespace dropped by hand.
+
+Observed on the development stack, where the state file survived a previous
+Vektra database:
+
+```
+PDF documents in source_documents (live or deleted):    0
+PDF documents the state file claimed ingested:         35
+of those 35 document ids, present in Vektra:            0
+```
+
+All the slide material was missing from the index, and the workflow would never
+have re-ingested it: `timemodified` had not moved, so every run reported
+`unchanged`. No error, no failed row, no signal of any kind. The assistant
+answered from video transcripts alone and nobody could have said why.
+
+The server was checked and is aligned — 87 of 87 document ids present — so this
+is not an incident. It is a class of failure the pipeline cannot detect.
+
+**Repaired locally** by removing the state entries whose document id no longer
+resolved and letting the next run re-ingest them. That is the right remedy, but
+it is not a fix for the gap: someone has to suspect the problem first.
+
+**Possible shapes for a fix**, none obviously right:
+- A periodic reconciliation pass that asks Vektra which of the state's document
+  ids still exist and drops the rest, which costs one query per run
+- Verifying on write rather than on read, so a document that fails to appear is
+  never recorded as ingested
+- Accepting it and documenting the manual check, which is what exists today
+
+The first is cheap and catches the whole class. The third is honest but relies
+on someone thinking to look.
+
+**Acceptance criteria**:
+- [ ] A run detects state entries whose documents no longer exist in Vektra
+- [ ] Detection is reported rather than silently repaired, since mass deletion on the Vektra side may itself be the incident
+- [ ] The check is cheap enough to run every cycle, or is scheduled separately
+
+---
+
+### DEBT-006: The server's n8n compose has drifted from the repository
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+
+**Context**: the n8n `docker-compose.yml` on the VM was hand-edited to add
+`INGEST_OPT_OUT_TAG` and is not the file in this repository. Reported by the
+session with VM access during the FEAT-007 deploy.
+
+This is the same disease as the mooc workflow: configuration maintained by hand,
+outside version control, drifting silently. The mooc divergence surfaced only
+because it was about to be broken; this one surfaced only because someone
+mentioned it.
+
+It also has a concrete cost now. FEAT-007 gives `STATE_FILE_PATH` a default in
+the repository's compose so the existing instance keeps working. A VM whose
+compose differs does not inherit that default, and the main instance stops
+ingesting until the variable is set explicitly.
+
+**Acceptance criteria**:
+- [ ] The VM's compose and env differences are captured in the repository, or the VM uses the repository's file with a documented overlay
+- [ ] Adding a variable does not require editing a file that exists only on the server
+
+---
+
+### DEBT-005: The ingestion API key carries more scope than it uses
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+
+**Context**: measured against the workflow, not assumed. It calls exactly two
+Vektra endpoints:
+
+```
+POST   /api/v1/ingest
+DELETE /api/v1/documents/batch
+```
+
+so it needs `ingest`. The key in use carries `admin,ingest,query`. Anyone who
+intercepts it also gets namespace administration.
+
+Distinct from BUG-010, which was about the permissiveness of the written
+guidance and is closed. This is about the credential actually in use.
+
+Cheaper and more effective than encrypting the transport (DEBT-003): it reduces
+what a captured key is worth, rather than reducing the chance of capture. Both
+credentials travel in cleartext on the Compose network today either way.
+
+**Acceptance criteria**:
+- [ ] A key scoped to `ingest` alone is issued and used by the workflow, on the server as well as locally
+- [ ] The over-scoped key is revoked
+- [ ] `n8n/README.md` states the minimum scope
+
+---
+
+### DEBT-004: Auto-generated transcripts mis-transcribe proper nouns
+
+**Status**: planned | **Priority**: high | **Created**: 2026-09-10
+**Blocks nothing, decides much**: this is the open question FEAT-004 left behind
+
+**Context**: the ingested transcripts are YouTube's automatic captions. In the
+Psicologia generale corpus the neuropsychology case *Phineas Gage* is
+transcribed *"Finess Cage"* — the most-cited proper noun in that lecture. A
+student searching the correct spelling does not retrieve the passage.
+
+Thirty-six documents are indexed this way, in a system that cites its sources.
+The material is a net gain over having no video content at all, which is why it
+shipped, but the limitation is not cosmetic: it degrades exactly the retrieval
+the feature exists to provide.
+
+**Options, none implemented**:
+- Accept it, and rely on the provenance header each document carries
+- A correction pass over the transcript before ingestion, with an LLM
+- A per-course glossary of proper nouns, applied as a substitution
+
+The first costs nothing and is honest; the second costs tokens per video and
+introduces a second source of error; the third costs manual curation but is
+predictable. This is a decision, not a task.
+
+**Acceptance criteria**:
+- [ ] A decision is recorded, with its reasoning
+- [ ] If mitigation is chosen, a sample of the 36 lectures measures whether it helps
+
+---
+
+### FEAT-008: Pass course_id and module_id in the ingest metadata
+
+**Status**: planned | **Priority**: low | **Created**: 2026-09-10
+**Agreed as a separate item** during FEAT-006, with the coordinating session
+
+**Context**: the ingest contract accepts a flat `metadata` object, and FEAT-006
+already sends `hidden_from_students` through it. `course_id` and `module_id`
+travel the same channel and cost roughly two lines, but they answer a different
+question — provenance rather than visibility — and the repository's convention
+is one concern per branch.
+
+Both names satisfy the contract's `^[a-z][a-z0-9_]{0,63}$`.
+
+**Acceptance criteria**:
+- [ ] Both keys are sent for every ingested document
+- [ ] Values are the Moodle course id and course-module id, not the derived namespace
+- [ ] A backend consumer is identified before shipping, so the keys are not written into an index nobody reads
+
+---
+
+### FEAT-009: Derive the transcript language from the course
+
+**Status**: planned | **Priority**: low | **Created**: 2026-09-10
+
+**Context**: the transcript request hardcodes `lang=it`, overridable only
+process-wide via `YTDLP_TRANSCRIPT_LANG`. The block already carries a per-course
+language setting. A non-Italian course silently gets no transcript: the service
+returns `TRANSCRIPT_NOT_FOUND` and the page is reported `failed`, which reads as
+an outage rather than a language mismatch.
+
+Costs nothing today, because every course is Italian. It becomes a bug the day
+one is not.
+
+**Acceptance criteria**:
+- [ ] The language reaches the transcript request from the course rather than the environment
+- [ ] A missing track for the requested language is distinguishable in the summary from a service failure
 ---
 
 ### DEBT-003: Credentials travel in cleartext between the ingestion containers
@@ -167,50 +423,6 @@ below is done.
 - [ ] All three hops use TLS with certificate validation, or an equivalent authenticated transport boundary
 - [ ] No credential is observable to a process that can read the Compose bridge
 - [ ] `n8n/README.md` documents the certificate setup
-
----
-
-### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
-
-**Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
-
-**Context**: Every workflow run died at the first HTTP node, `Get Courses`, in
-under a tenth of a second. Originally logged as a Docker networking fault
-because `wget` from the n8n container reported `Connection refused` while a
-throwaway container on the same network appeared to succeed.
-
-**That diagnosis was wrong.** The network was fine throughout: `nc -z` from the
-n8n container reported port 80 open on Moodle at the same moment `wget` to the
-same address reported `Connection refused`. Verbose `wget` showed why:
-
-```
-Connecting to 172.21.0.3 (172.21.0.3:80)
-Connecting to localhost:10180 ([::1]:10180)
-wget: can't connect to remote host: Connection refused
-```
-
-Moodle answered, then redirected to its `$CFG->wwwroot`, which the dev stack
-defaults to `http://localhost:10180` for browser convenience. Inside the n8n
-container `localhost` is n8n itself, where nothing listens on 10180. The
-throwaway-container test had only ever checked the `303` status without
-following the redirect, which is what made the fault look container-specific.
-
-**Resolution**: set `MOODLE_URL=http://vektra-moodle` in `docker/.env` and
-recreate the Moodle container, so `wwwroot` matches the hostname n8n calls.
-This is the configuration `docker/docker-compose.yml:29-32` already documents;
-it had simply never been applied to this environment. It is not a code defect
-and affects no deployment where the two stacks were brought up together.
-
-**Consequence for browser access**: with `wwwroot` set to the Docker hostname,
-opening `http://localhost:10180` from the host redirects to `http://vektra-moodle`
-and fails until `127.0.0.1 vektra-moodle` is added to the host's `/etc/hosts`,
-as the same compose comment states.
-
-**Acceptance criteria**:
-- [x] Root cause identified
-- [x] `wget "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
-- [x] `core_course_get_courses` returns JSON to n8n
-- [x] A full workflow run reaches `Extract Files` and completes
 
 ---
 
@@ -267,10 +479,14 @@ processed.
 
 ## Completed
 
-### FEAT-008: Index only the courses that carry the Vektra block
+### FEAT-010: Index only the courses that carry the Vektra block
 
 **Status**: completed | **Priority**: high | **Created**: 2026-09-10 | **Completed**: 2026-09-10
 **Branch**: `feat/ingest-scope-by-block`
+**Numbering**: the commits on that branch say FEAT-008, which was free when the
+branch started and was claimed by another item while it was open. Renumbered
+here rather than rewriting the history, because the review replies on PR #35
+cite commit hashes.
 **Origin**: the pipeline indexed every course; on `mooc.unical.it` that is ~50
 courses, the whole university
 
@@ -329,6 +545,75 @@ identical, so the `name` field carries the same value there.
 `n8n Ingestion` web service on each instance. The service id differs between
 installations (2 on one, 3 on the other).
 
+### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
+
+**Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
+
+**Context**: Every workflow run died at the first HTTP node, `Get Courses`, in
+under a tenth of a second. Originally logged as a Docker networking fault
+because `wget` from the n8n container reported `Connection refused` while a
+throwaway container on the same network appeared to succeed.
+
+**That diagnosis was wrong.** The network was fine throughout: `nc -z` from the
+n8n container reported port 80 open on Moodle at the same moment `wget` to the
+same address reported `Connection refused`. Verbose `wget` showed why:
+
+```
+Connecting to 172.21.0.3 (172.21.0.3:80)
+Connecting to localhost:10180 ([::1]:10180)
+wget: can't connect to remote host: Connection refused
+```
+
+Moodle answered, then redirected to its `$CFG->wwwroot`, which the dev stack
+defaults to `http://localhost:10180` for browser convenience. Inside the n8n
+container `localhost` is n8n itself, where nothing listens on 10180. The
+throwaway-container test had only ever checked the `303` status without
+following the redirect, which is what made the fault look container-specific.
+
+**Resolution**: set `MOODLE_URL=http://vektra-moodle` in `docker/.env` and
+recreate the Moodle container, so `wwwroot` matches the hostname n8n calls.
+This is the configuration `docker/docker-compose.yml:29-32` already documents;
+it had simply never been applied to this environment. It is not a code defect
+and affects no deployment where the two stacks were brought up together.
+
+**Consequence for browser access**: with `wwwroot` set to the Docker hostname,
+opening `http://localhost:10180` from the host redirects to `http://vektra-moodle`
+and fails until `127.0.0.1 vektra-moodle` is added to the host's `/etc/hosts`,
+as the same compose comment states.
+
+**Acceptance criteria**:
+- [x] Root cause identified
+- [x] `wget "$MOODLE_URL/login/index.php"` succeeds from inside the n8n container
+- [x] `core_course_get_courses` returns JSON to n8n
+- [x] A full workflow run reaches `Extract Files` and completes
+
+---
+
+### BUG-019: Two workflows sharing one state file delete each other's documents
+
+**Status**: completed | **Priority**: high | **Created**: 2026-09-10 | **Completed**: 2026-09-10
+**Fixed by**: FEAT-007 (`Config` node, PR #33)
+
+**Context**: `STATE_FILE_PATH` was unset and the workflow fell back to a shared
+default. n8n environment is per process, so two workflows in one instance both
+resolved to `/home/node/.n8n/moodle-ingest-state.json`. From there each run sees
+the other instance's documents as present in state but absent from Moodle,
+classifies them `removed`, deletes them from the index, and re-ingests them on
+the next run — a loop with no error anywhere.
+
+The empty-course guard cannot catch this. It fires only on an empty file list,
+and neither instance's list is ever empty.
+
+Found while diffing the mooc workflow against the template, one step before
+proposing exactly the import that would have triggered it.
+
+**Fix**: `Config` has no default for the state path and throws a named error when
+it is missing. This item exists so that the fail-loud is not mistaken for
+over-caution: the first person to find it inconvenient will restore a default,
+and the failure it prevents is silent and slow.
+
+**Regression guard**: `n8n/README.md` documents it, and the harness asserts that
+generated instances never carry a hardcoded state path.
 ---
 
 ### FEAT-007: One workflow template for several Moodle instances
@@ -726,6 +1011,15 @@ Example: shortname `"Course 101"` → ingest writes to `course-101`, widget quer
 ### BUG-006: n8n README references non-existent `n8n publish:workflow` CLI
 
 **Status**: completed | **Priority**: high | **Created**: 2026-04-26 | **Completed**: 2026-04-28
+> **Superseded by the runtime, 2026-09-10.** `n8n publish:workflow` exists in
+> n8n 2.17.2, which this stack now runs, and it is required rather than
+> optional: importing over an active workflow deactivates it, so the deploy
+> sequence is import -> publish -> restart. The claim above was right against
+> the 1.85.4 pin this item was written under, and wrong today. `n8n/README.md`
+> now documents all three paths with the CLI first. Recorded rather than
+> reopened: a closed item that asserts the opposite of current behaviour, in
+> the section people read while deploying, is worse than a stale one.
+
 **Origin**: CodeRabbit review on PR #15, comment 3144124466
 
 **Implementation** (commit 3a11ddf on branch `fix/v0.5.0-batch-c`):
