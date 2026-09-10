@@ -229,6 +229,16 @@ check('corso fuori scope esce subito, senza leggere i contenuti', () => {
   eq(r, { courseId: 5, namespace: 'storia-ambiente', files: [], modulesSeen: 0, modulesExcluded: 0, _outOfScope: true });
 });
 
+check('fuori scope funziona quando l\'IF salta la chiamata contenuti', () => {
+  // `Out of scope?` routes the course item itself here, not a Moodle response.
+  const course = { id: 5, shortname: 'storia-ambiente', _outOfScope: true };
+  const r = runNode('Extract Files', {
+    nodes: { Config: cfg('/dev/null'), 'Loop Courses': [{ json: course }] },
+    input: [{ json: course }],
+  }).out[0].json;
+  eq(r, { courseId: 5, namespace: 'storia-ambiente', files: [], modulesSeen: 0, modulesExcluded: 0, _outOfScope: true });
+});
+
 check('fuori scope vince anche se Moodle ha risposto male', () => {
   const r = extract({ id: 5, shortname: 'storia-ambiente', _outOfScope: true }, { exception: 'boom' });
   eq(r._outOfScope, true);
@@ -249,6 +259,30 @@ check('opt-out continua a funzionare in un corso in scope', () => {
   eq(r.files.length, 0); eq(r.modulesExcluded, 1);
 });
 
+// ---------------- No Changes ----------------
+console.log('\nNo Changes');
+
+const noChanges = (input) => runNode('No Changes', { input: [{ json: input }] }).out[0].json;
+
+check('corso potato con tutte le cancellazioni riuscite: risulta uscito', () => {
+  const r = noChanges({ courseId: 5, namespace: 'ns', _outOfScope: true, unchanged: [],
+    deleteResults: [{ filename: 'a.pdf', status: 'deleted' }, { filename: 'b.pdf', status: 'deleted' }] });
+  eq(r._outOfScope, true);
+});
+
+check('una cancellazione fallita NON fa contare il corso come uscito', () => {
+  const r = noChanges({ courseId: 5, namespace: 'ns', _outOfScope: true, unchanged: [],
+    deleteResults: [{ filename: 'a.pdf', status: 'deleted' },
+                    { filename: 'b.pdf', status: 'delete_failed', error: 'HTTP 500' }] });
+  eq(r._outOfScope, false, 'i documenti sono ancora li, il corso non e uscito:');
+  eq(r.courseResults.filter(x => x.status === 'failed').length, 1);
+});
+
+check('un corso in scope non viene mai marcato come uscito', () => {
+  const r = noChanges({ courseId: 3, namespace: 'ns', unchanged: [{ filename: 'a.pdf' }], deleteResults: [] });
+  eq(r._outOfScope, false);
+});
+
 // ---------------- Ingestion Summary ----------------
 console.log('\nIngestion Summary');
 
@@ -265,6 +299,14 @@ check('conta i corsi usciti dall\'indice', () => {
   eq(r.totals.removed, 2);
   eq(r.totals.new, 1);
   if (!r.summary.includes('1 course(s) left the index')) throw new Error(`sommario muto: ${r.summary}`);
+});
+
+check('un corso con cancellazioni fallite non entra in purgedCourses', () => {
+  const r = summarize([{ _outOfScope: false, courseResults: [
+    { file_name: 'a.pdf', action: 'removed', status: 'completed' },
+    { file_name: 'b.pdf', action: 'removed', status: 'failed', error: 'HTTP 500' }] }]);
+  eq(r.totals.purgedCourses, 0);
+  eq(r.totals.failed, 1);
 });
 
 check('senza potature il sommario resta come prima', () => {
