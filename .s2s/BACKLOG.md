@@ -20,6 +20,47 @@
 
 ## Planned
 
+### DEBT-011: Block ownership is inferred, because the web service will not say
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+**Origin**: CodeRabbit review of PR #35 (Security & Privacy, Major)
+
+**Context**: FEAT-008 decides whether a course carries the Vektra block from
+`core_block_get_course_blocks`, which reports a block inherited from a site or
+category context under every course beneath it. The response carries no parent
+context — `instanceid`, `name`, `region`, `positionid`, `collapsible`,
+`dockable`, `weight`, `visible`, and nothing else — so ownership is inferred
+from cardinality: an instance id seen under more than one course is inherited.
+
+**Where the inference fails**: a category holding exactly **one** course. Its
+inherited block is seen once, is indistinguishable from that course's own block,
+and the course is indexed when it should not be. A lookup that fails elsewhere
+can also push a genuinely inherited block down to one sighting. The workflow
+logs when the usable set is that small, but it cannot decide.
+
+**Blast radius**: one course indexed that should not be — against the whole
+installation the test does catch. Not a reason to leave it: on an ateneo Moodle
+one course of material reaching students who should not see it is the same class
+of problem the scoping exists to prevent.
+
+**The fix**: have the plugin report ownership rather than infer it. A web-service
+function in `block_vektra` can query `mdl_block_instances` joined to
+`mdl_context` and return the courses whose block sits on the **course** context
+(`contextlevel = 50`), which settles the question outright and in one call
+instead of one per course. It also removes the per-course fan-out — about fifty
+requests a run on `mooc.unical.it`.
+
+That means shipping a plugin version before the workflow can rely on it, so the
+inference stays as the fallback for installations running an older plugin.
+
+**Acceptance criteria**:
+- [ ] The plugin exposes the courses carrying the block, by course context
+- [ ] The workflow prefers it and falls back to the inference when it is absent
+- [ ] A block on a category holding one course does not scope that course in
+- [ ] The fallback path keeps its probes
+
+---
+
 ### DEBT-010: Only the first course with files is ingested in a multi-course run
 
 **Status**: planned | **Priority**: high | **Created**: 2026-09-10

@@ -346,6 +346,19 @@ id appearing under more than one course is ignored and logged. If the *only*
 Vektra blocks found are inherited ones and indexed courses would be removed, the
 run stops rather than prune.
 
+**This test has a limit, and it is not closeable from here.** An inherited block
+is recognised by being seen under more than one course, so a block on a category
+holding exactly **one** course looks identical to that course's own block, and
+the course is indexed. A failed lookup elsewhere can push a genuinely inherited
+block down to a single sighting too. `core_block_get_course_blocks` returns
+`instanceid`, `name`, `region`, `positionid`, `collapsible`, `dockable`,
+`weight` and `visible` — no parent context — so nothing in the response settles
+it. The blast radius is one course indexed that should not be, against the whole
+installation the test does catch; DEBT-011 carries the proper fix, which needs
+the plugin to report block ownership itself.
+
+So the operational rule is not merely tidiness: **put the block on the course**.
+
 ### A failed lookup never removes anything
 
 Moodle answers a web-service exception with HTTP 200 and an `exception` body, so
