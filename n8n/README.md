@@ -240,6 +240,9 @@ generated from the template:
 
 ```bash
 node n8n/scripts/build-instance.mjs mooc > /tmp/mooc.json
+# The container mounts only n8n_data at /home/node/.n8n, so the host's /tmp is
+# not visible inside it. Copy the file in, or the import fails on a missing path.
+docker compose cp /tmp/mooc.json n8n:/tmp/mooc.json
 docker compose exec -T n8n n8n import:workflow --input=/tmp/mooc.json
 docker compose exec -T n8n n8n publish:workflow --id=<id from the instance file>
 docker compose restart n8n
