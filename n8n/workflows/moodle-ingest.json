@@ -150,6 +150,39 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "out-of-scope",
+              "leftValue": "={{ $json._outOfScope }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "out-of-scope",
+      "name": "Out of scope?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
         "method": "GET",
         "url": "={{ $('Config').first().json.moodleUrl }}/webservice/rest/server.php",
         "sendQuery": true,
@@ -193,7 +226,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// A teacher opts a module out of the index by putting this tag in its title.\n// Matched case-insensitively anywhere in the title, because the title is written\n// by a person: \"[no-ai] Lezione 3\" and \"Lezione 3 [NO-AI]\" must both work.\n// Set INGEST_OPT_OUT_TAG to an empty string to disable the feature entirely.\nconst OPT_OUT_TAG = ($('Config').first().json.optOutTag || '').toLowerCase();\n\nconst SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\nconst namespace = slugify(rawShortname, courseId);\n\n// A course whose Vektra block was removed is not \"a course with no files\" — it\n// is a course whose whole index must go. Scope Courses marks it, and this hands\n// Dedup & Diff the shape it needs to compute the removals. The content request\n// upstream has already run and its result is ignored: that costs one wasted call\n// per purged course, once, because Handle Deletions empties the namespace and\n// Scope Courses drops the course entirely from the next run on.\n// Deliberately ahead of the _moodleError check below: a course being removed\n// from the index does not need its contents to be readable.\nif (courseItem.json._outOfScope === true) {\n  return [{ json: { courseId, namespace, files: [], modulesSeen: 0, modulesExcluded: 0, _outOfScope: true } }];\n}\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\n// Safety: if Moodle returned an error or unexpected format, abort with _moodleError flag.\n// Returning files:[] would cause Dedup&Diff to mark ALL stored files as deleted — catastrophic.\nif (!Array.isArray(sections)) {\n  const raw = JSON.stringify(sections).slice(0, 200);\n  return [{ json: { _moodleError: true, errorDetail: raw, courseId, namespace, files: [] } }];\n}\n\nconst files = [];\n// Counted so Dedup & Diff can tell \"no files because a teacher excluded them\"\n// apart from \"no files because Moodle is down\" — the two look identical\n// downstream, and only the second one must suppress deletions.\nlet modulesSeen = 0;\nlet modulesExcluded = 0;\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    modulesSeen++;\n\n    // Opt-out wins over everything else this module could contribute: both its\n    // documents and, for a page, its transcript.\n    if (OPT_OUT_TAG && (mod.name || '').toLowerCase().includes(OPT_OUT_TAG)) {\n      modulesExcluded++;\n      continue;\n    }\n\n    // Page modules carry their HTML body as index.html with a NULL mimetype,\n    // so SUPPORTED_MIMES can never match it. Emit it as a transcript\n    // candidate; the video id is only discoverable after downloading the HTML.\n    // Deliberately NOT followed by `continue`: slide PDFs are attached to page\n    // modules alongside index.html, and skipping the loop below would silently\n    // stop ingesting all of them.\n    if (mod.modname === 'page') {\n      const index = mod.contents.find(\n        c => c.type === 'file' && c.filename === 'index.html' && c.fileurl\n      );\n      if (index) {\n        files.push({\n          _kind: 'page',\n          // Visibility is a property of the MODULE, not of the file: hiding a\n          // module leaves index.html byte-identical, so this is the only signal\n          // that the material must stop being cited.\n          hidden: mod.visible === 0,\n          fileurl: index.fileurl,\n          filename: `${mod.name}.md`,\n          uniqueFilename: `mod${mod.id}_transcript.md`,\n          filesize: index.filesize,\n          timemodified: index.timemodified,\n          mimetype: 'text/markdown',\n          moduleId: mod.id,\n          moduleName: mod.name,\n          sectionName: section.name,\n          courseId,\n          namespace\n        });\n      }\n    }\n\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        hidden: mod.visible === 0,\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files, modulesSeen, modulesExcluded } }];"
+        "jsCode": "// A teacher opts a module out of the index by putting this tag in its title.\n// Matched case-insensitively anywhere in the title, because the title is written\n// by a person: \"[no-ai] Lezione 3\" and \"Lezione 3 [NO-AI]\" must both work.\n// Set INGEST_OPT_OUT_TAG to an empty string to disable the feature entirely.\nconst OPT_OUT_TAG = ($('Config').first().json.optOutTag || '').toLowerCase();\n\nconst SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\nconst namespace = slugify(rawShortname, courseId);\n\n// A course whose Vektra block was removed is not \"a course with no files\" — it\n// is a course whose whole index must go. Scope Courses marks it, and this hands\n// Dedup & Diff the shape it needs to compute the removals.\n//\n// `Out of scope?` routes these items here directly, so no content request is\n// made for them and $input holds the course item rather than a Moodle response.\n// Nothing below this line runs for them, which is the point: neverError covers\n// non-2xx answers but not transport failures, and a timeout on a request whose\n// result is discarded anyway would stop the node before the removals were ever\n// computed — leaving a withdrawn course in the index because the network\n// hiccupped.\nif (courseItem.json._outOfScope === true) {\n  return [{ json: { courseId, namespace, files: [], modulesSeen: 0, modulesExcluded: 0, _outOfScope: true } }];\n}\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\n// Safety: if Moodle returned an error or unexpected format, abort with _moodleError flag.\n// Returning files:[] would cause Dedup&Diff to mark ALL stored files as deleted — catastrophic.\nif (!Array.isArray(sections)) {\n  const raw = JSON.stringify(sections).slice(0, 200);\n  return [{ json: { _moodleError: true, errorDetail: raw, courseId, namespace, files: [] } }];\n}\n\nconst files = [];\n// Counted so Dedup & Diff can tell \"no files because a teacher excluded them\"\n// apart from \"no files because Moodle is down\" — the two look identical\n// downstream, and only the second one must suppress deletions.\nlet modulesSeen = 0;\nlet modulesExcluded = 0;\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    modulesSeen++;\n\n    // Opt-out wins over everything else this module could contribute: both its\n    // documents and, for a page, its transcript.\n    if (OPT_OUT_TAG && (mod.name || '').toLowerCase().includes(OPT_OUT_TAG)) {\n      modulesExcluded++;\n      continue;\n    }\n\n    // Page modules carry their HTML body as index.html with a NULL mimetype,\n    // so SUPPORTED_MIMES can never match it. Emit it as a transcript\n    // candidate; the video id is only discoverable after downloading the HTML.\n    // Deliberately NOT followed by `continue`: slide PDFs are attached to page\n    // modules alongside index.html, and skipping the loop below would silently\n    // stop ingesting all of them.\n    if (mod.modname === 'page') {\n      const index = mod.contents.find(\n        c => c.type === 'file' && c.filename === 'index.html' && c.fileurl\n      );\n      if (index) {\n        files.push({\n          _kind: 'page',\n          // Visibility is a property of the MODULE, not of the file: hiding a\n          // module leaves index.html byte-identical, so this is the only signal\n          // that the material must stop being cited.\n          hidden: mod.visible === 0,\n          fileurl: index.fileurl,\n          filename: `${mod.name}.md`,\n          uniqueFilename: `mod${mod.id}_transcript.md`,\n          filesize: index.filesize,\n          timemodified: index.timemodified,\n          mimetype: 'text/markdown',\n          moduleId: mod.id,\n          moduleName: mod.name,\n          sectionName: section.name,\n          courseId,\n          namespace\n        });\n      }\n    }\n\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        hidden: mod.visible === 0,\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files, modulesSeen, modulesExcluded } }];"
       },
       "id": "extract-files",
       "name": "Extract Files",
@@ -419,7 +452,7 @@
         ],
         [
           {
-            "node": "Get Course Contents",
+            "node": "Out of scope?",
             "type": "main",
             "index": 0
           }
@@ -595,6 +628,24 @@
         [
           {
             "node": "Loop Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Out of scope?": {
+      "main": [
+        [
+          {
+            "node": "Extract Files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Course Contents",
             "type": "main",
             "index": 0
           }
