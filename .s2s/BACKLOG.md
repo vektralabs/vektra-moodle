@@ -60,11 +60,30 @@ requests a run on `mooc.unical.it`.
 That means shipping a plugin version before the workflow can rely on it, so the
 inference stays as the fallback for installations running an older plugin.
 
+**Risk accepted to ship FEAT-008**: the review thread on PR #35 was resolved by
+hand rather than by a fix, deliberately and on the record. CodeRabbit's closing
+position is the correct one and is quoted here so nobody has to reconstruct it:
+
+> The deliberate false-negative trade-off is clear. However, it does not meet
+> the original requirement to prevent indexing from ambiguous ownership data.
+> DEBT-011 remains the required path to determine ownership reliably.
+
+What was weighed: the exposure is one course indexed that should not be, it is
+now named in the run log, and it is reversible by moving the block. Against that,
+closing it properly means a plugin release on both instances inside two days of a
+demo. The trade was taken for the demo, not for good.
+
+**This is the debt**: the run can name the courses it cannot decide about, and
+nothing more. Until the plugin reports ownership, a Vektra block on a category
+holding one course indexes that course, and no run will ever say it was wrong to.
+
 **Acceptance criteria**:
 - [ ] The plugin exposes the courses carrying the block, by course context
 - [ ] The workflow prefers it and falls back to the inference when it is absent
 - [ ] A block on a category holding one course does not scope that course in
 - [ ] The fallback path keeps its probes
+- [ ] The singleton-category warning goes away once ownership is known, rather
+      than staying as noise beside a signal that no longer needs it
 
 ---
 
