@@ -141,10 +141,21 @@ course 4 ingesting 516 chunks after course 2 had already run its inner loop.
 silently, and no error is raised. Which course that is depends on the order
 `core_course_get_courses` returns, so it can move.
 
+**Exactly when it bites**: only when the course the loop handles last is both in
+scope and has files to ingest. The `mooc.unical.it` deploy showed the harmless
+case — 49 courses, one of them scoped (`psicologia-generale-alma`, id 42, not
+last), so the course that fell off the end was out of scope and nothing was
+lost. On mooc2 it showed the harmful one: course 6 carried the block and was
+last, and its 36 modules were never indexed.
+
+That makes the exposure narrow but sharp, and it moves on its own — the order
+comes from whatever `core_course_get_courses` returns, so a course that is safe
+today becomes the lost one as soon as a course is added, removed, or given the
+block. It cannot be relied on.
+
 **Not blocking the demo**, which runs on `psicologia-generale` and is fully
-indexed. A short-term mitigation, if one is wanted before the fix: the run
-processes courses in the order Moodle returns them, so a course that must not be
-missed should not be last.
+indexed. A short-term mitigation, if one is wanted before the fix: a course that
+must not be missed should not be last in that order.
 
 **Acceptance criteria**:
 - [x] Reproduced under the schedule trigger, not only the CLI
@@ -271,6 +282,14 @@ answered from video transcripts alone and nobody could have said why.
 
 The server was checked and is aligned — 87 of 87 document ids present — so this
 is not an incident. It is a class of failure the pipeline cannot detect.
+
+**Seen again on the server**, in the other direction, during the
+`mooc.unical.it` scoping deploy: `psicologia-generale-alma` already held 109
+chunks in Qdrant while the instance's state file had no record of the course at
+all. The index was ahead of the state rather than behind it, which the pipeline
+notices just as little — it would have re-ingested all 36 files as new. The
+scoped run has since realigned the two. Two sightings, opposite directions, same
+blind spot.
 
 **Repaired locally** by removing the state entries whose document id no longer
 resolved and letting the next run re-ingest them. That is the right remedy, but
