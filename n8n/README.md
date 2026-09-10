@@ -149,6 +149,19 @@ and vektra-moodle are running first, otherwise startup will fail.
 
 ## Testing
 
+The Code nodes' logic can be checked without Moodle, Vektra or n8n:
+
+```bash
+node n8n/tests/scope-by-block.mjs
+```
+
+The probes read each node's source out of the workflow template and run it with
+n8n's globals stubbed, so they check the template itself rather than a copy of
+it. They cover the course scoping, the deletion diff, file extraction and the
+summary counts.
+
+For a run against the real stack:
+
 1. Upload a PDF file to a Moodle course as a **File** resource
 2. Trigger the workflow manually (click **Execute Workflow** in n8n)
 3. Check the **Ingestion Summary** node output
@@ -281,6 +294,98 @@ So each instance's state path must be distinct, and on an existing instance it
 must point at the file that instance **already uses**. Pointing it somewhere new
 is not an error the pipeline can detect: it simply looks like an empty index and
 re-ingests everything.
+
+## Which courses get indexed
+
+A course is indexed while — and only while — it carries the **Vektra block**.
+Adding the block to a course puts its material in the index on the next run;
+removing the block takes the material back out. Nobody has to touch n8n, and no
+list of courses is maintained anywhere.
+
+Without this the pipeline indexed every course on the Moodle. On a university
+installation that is the whole institution, which is neither wanted nor
+affordable.
+
+### What the pipeline does with each course
+
+| Course | What happens | Cost per run |
+|---|---|---|
+| Has the block | Indexed, as before | block lookup + contents |
+| No block, never indexed | Skipped entirely | block lookup |
+| No block, but in the index | **Removed from the index** | block lookup, once |
+| Block lookup failed | Left exactly as it is | block lookup |
+
+Removal is deliberate and it is not free to skip: leaving an unscoped course
+alone would freeze a stale index that keeps answering students from material the
+teacher meant to withdraw. So the course goes through the normal deletion path,
+its documents are deleted from Vektra, and its state entries are dropped — after
+which it costs nothing but the lookup, forever.
+
+> **Before the first scoped run**, every course that should stay in the index
+> must already have the block. Any indexed course without one is removed on that
+> run.
+
+### Enabling the web-service function
+
+The pipeline calls `core_block_get_course_blocks`, which is **not** part of the
+default `n8n Ingestion` service. Add it under **Site administration > Server >
+Web services > External services > n8n Ingestion > Functions**.
+
+The service's numeric id differs between installations — it is 2 on one of ours
+and 3 on the other — so navigate by name, not by a remembered id.
+
+Until the function is enabled, every lookup fails and the workflow stops with
+`Scope Courses: every block lookup failed`. That is deliberate: with no usable
+signal the pipeline would index nothing and delete everything it had.
+
+### Put the block on the course, never on the site
+
+Moodle reports a block placed on the site (or on a category) with *show in
+subcontexts* under **every** course beneath it. Left unhandled, one such block
+would scope the entire Moodle back in, silently.
+
+The workflow recognises it: an inherited block is one instance seen under many
+courses, while a real per-course block is unique to its course, so any instance
+id appearing under more than one course is ignored and logged. If the *only*
+Vektra blocks found are inherited ones and indexed courses would be removed, the
+run stops rather than prune.
+
+**This test has a limit, and it is not closeable from here.** An inherited block
+is recognised by being seen under more than one course, so a block on a category
+holding exactly **one** course looks identical to that course's own block, and
+the course is indexed. A failed lookup elsewhere can push a genuinely inherited
+block down to a single sighting too. `core_block_get_course_blocks` returns
+`instanceid`, `name`, `region`, `positionid`, `collapsible`, `dockable`,
+`weight` and `visible` — no parent context — so nothing in the response settles
+it. The blast radius is one course indexed that should not be, against the whole
+installation the test does catch; DEBT-011 carries the proper fix, which needs
+the plugin to report block ownership itself.
+
+What the workflow can do, and does, is **name the courses where the doubt
+applies**. A course alone in its category is precisely where a single sighting
+stops being evidence, so each one is logged by name:
+
+```
+[Scope Courses] course 12 (analisi-2) is the only course in its category.
+If its Vektra block sits on the category rather than on the course, it is
+being indexed by mistake — check where the block is.
+```
+
+The course is still indexed — refusing it would break every course that is
+legitimately alone in its category — but the doubt is now a line in the run log
+with a course number on it, which takes a moment to settle, instead of a
+paragraph in this file that nobody reads at the right time.
+
+So the operational rule is not merely tidiness: **put the block on the course**.
+
+### A failed lookup never removes anything
+
+Moodle answers a web-service exception with HTTP 200 and an `exception` body, so
+a failure and "this course has no block" look alike unless they are told apart.
+They are: a course whose lookup failed is left out of the run entirely, which
+leaves its index untouched. This matters because on `mooc.unical.it` the
+web-service token belongs to a person's account rather than a service account —
+if that account is disabled, every lookup fails at once.
 
 ## Hidden modules
 

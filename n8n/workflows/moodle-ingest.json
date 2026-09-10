@@ -80,6 +80,62 @@
       ]
     },
     {
+      "id": "get-course-blocks",
+      "name": "Get Course Blocks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.moodleUrl }}/webservice/rest/server.php",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "wstoken",
+              "value": "={{ $('Config').first().json.wsToken }}"
+            },
+            {
+              "name": "wsfunction",
+              "value": "core_block_get_course_blocks"
+            },
+            {
+              "name": "courseid",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "moodlewsrestformat",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "scope-courses",
+      "name": "Scope Courses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n// Path comes from Config, which refuses to run without it. No default here:\n// a shared fallback is what let two instances delete each other's documents.\nconst STATE_FILE = $('Config').first().json.statePath;\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { return { courseFiles: {} }; } }\n\n// A course is indexed only while it carries the Vektra block. Moodle reports the\n// block in `name`, without the `block_` component prefix — measured on Moodle\n// 5.1.3 and confirmed on mooc2 (5.1.4). blocks/classes/external.php is identical\n// on MOODLE_403_STABLE, so the same field carries the same value on the 4.3\n// instance too.\nconst BLOCK_NAME = 'vektra';\n\n// Mirrors the slug in Extract Files, and the plugin's namespace_resolver.php.\n// n8n Code nodes cannot share helpers, so the copies must be edited together.\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\n\nconst courses = $('Filter Courses').all().map(i => i.json);\nconst responses = $input.all().map(i => i.json);\n\n// The HTTP node emits one item per input item, in order. If that ever stopped\n// holding, pairing a course with another course's blocks would scope the wrong\n// ones in and prune the rest — refuse rather than guess.\nif (responses.length !== courses.length) {\n  throw new Error(`Scope Courses: got ${responses.length} block responses for ${courses.length} courses. Refusing to pair them by index.`);\n}\n\n// Pass 1: read each response as either a set of Vektra instance ids, or an error.\n// Moodle answers an exception with HTTP 200 and an `exception` body, so a failed\n// lookup is indistinguishable from \"no block\" unless it is checked for here —\n// and reading a failure as \"no block\" is what would prune a live index.\nconst parsed = [];\nfor (let i = 0; i < courses.length; i++) {\n  const course = courses[i];\n  const resp = responses[i] || {};\n  let body = resp.body !== undefined ? resp.body : resp;\n  if (typeof body === 'string') {\n    try { body = JSON.parse(body); } catch (e) { /* the shape check below rejects it */ }\n  }\n  let ids = null;\n  let error = null;\n\n  if (resp.statusCode !== undefined && (resp.statusCode < 200 || resp.statusCode >= 300)) {\n    error = `HTTP ${resp.statusCode}`;\n  } else if (body && body.exception) {\n    error = `${body.errorcode || body.exception}: ${String(body.message || '').substring(0, 120)}`;\n  } else if (!body || !Array.isArray(body.blocks)) {\n    error = `unexpected response shape: ${JSON.stringify(body).substring(0, 120)}`;\n  } else {\n    ids = body.blocks.filter(b => b && b.name === BLOCK_NAME).map(b => b.instanceid);\n  }\n  parsed.push({ course, ids, error });\n}\n\n// Pass 2: a block placed on the site, or on a category, with \"show in\n// subcontexts\" is reported by EVERY course beneath it — which would silently\n// scope the whole Moodle back in. Such a block is one instance seen many times,\n// while a per-course block is unique to its course, so an instance id that turns\n// up under more than one course is inherited and does not count as opting in.\nconst timesSeen = new Map();\nfor (const p of parsed) {\n  if (!p.ids) continue;\n  for (const id of p.ids) timesSeen.set(id, (timesSeen.get(id) || 0) + 1);\n}\nconst inherited = new Set();\nfor (const [id, n] of timesSeen) if (n > 1) inherited.add(id);\n\n// How many courses share each category, counted over every course in the run\n// rather than only the ones whose lookup succeeded — a course is alone in its\n// category or it is not, and a failed lookup elsewhere does not change that.\nconst coursesPerCategory = new Map();\nfor (const c of courses) {\n  const cat = c.categoryid;\n  if (cat === undefined || cat === null) continue;\n  coursesPerCategory.set(cat, (coursesPerCategory.get(cat) || 0) + 1);\n}\n\n// Pass 3: decide what happens to each course.\nconst state = readState();\nconst storedFiles = state.courseFiles || {};\nconst out = [];\nlet scoped = 0, purged = 0, dropped = 0, frozen = 0, ambiguous = 0;\n\nfor (const p of parsed) {\n  const course = p.course;\n\n  // A lookup that failed tells us nothing. Leaving the course out of the run\n  // freezes its index exactly as it is: Dedup & Diff never runs for a course\n  // that does not reach Loop Courses, so nothing is ingested and — the point —\n  // nothing is deleted.\n  if (p.error) {\n    frozen++;\n    console.log(`[Scope Courses] course ${course.id} (${course.shortname}): block lookup failed, left untouched — ${p.error}`);\n    continue;\n  }\n\n  const own = p.ids.filter(id => !inherited.has(id));\n  if (own.length > 0) {\n    scoped++;\n    // Being seen under one course only is what makes a block look course-owned,\n    // and a course alone in its category is exactly where that stops being\n    // evidence: a block on the category would also be seen exactly once. Which\n    // of the two it is cannot be read from this response, so name the course\n    // instead of leaving the doubt invisible — where the block sits takes a\n    // moment to check, and nothing else here will ever reveal it.\n    if (coursesPerCategory.get(course.categoryid) === 1) {\n      ambiguous++;\n      console.log(`[Scope Courses] course ${course.id} (${course.shortname}) is the only course in its category. If its Vektra block sits on the category rather than on the course, it is being indexed by mistake — check where the block is.`);\n    }\n    out.push({ json: { ...course } });\n    continue;\n  }\n\n  // Out of scope. Only a course that is actually in the index needs to travel\n  // any further; the rest are dropped here and cost nothing beyond this lookup.\n  // Removing the block therefore removes the material, which is the whole point:\n  // filtering a course out on its own would freeze a stale index, not clear it.\n  const namespace = slugify(course.shortname || `course-${course.id}`, course.id);\n  const stored = storedFiles[namespace];\n  if (stored && Object.keys(stored).length > 0) {\n    purged++;\n    out.push({ json: { ...course, _outOfScope: true } });\n  } else {\n    dropped++;\n  }\n}\n\nif (inherited.size > 0) {\n  console.log(`[Scope Courses] ${inherited.size} Vektra block instance(s) inherited from a site or category context were ignored: ${[...inherited].join(', ')}. Move the block onto the courses that should be indexed.`);\n}\n// The limit of this test, stated because it cannot be closed with this web\n// service: an inherited block is recognised by being seen under more than one\n// course, so a block on a category holding exactly ONE course looks exactly like\n// that course's own block, and the course is indexed. A failed lookup elsewhere\n// can push a genuinely inherited block down to a single sighting too. The\n// response carries no parent context to settle it — DEBT-011 has the fix that\n// would, which needs the plugin to report ownership itself.\nif (frozen > 0 && parsed.length - frozen <= 1) {\n  console.log(`[Scope Courses] ${frozen} of ${parsed.length} lookups failed, leaving ${parsed.length - frozen} usable. On this little evidence a block inherited from a category cannot be told apart from a course's own.`);\n}\n\n// Two ways the signal can be worthless. Both would do real damage in silence,\n// so both stop the run instead of acting on it.\nif (parsed.length > 0 && frozen === parsed.length) {\n  throw new Error(`Scope Courses: every block lookup failed (${frozen}/${parsed.length}). Is core_block_get_course_blocks enabled on this Moodle's web service? Refusing to run: with no usable signal this pipeline would index nothing and prune everything it has.`);\n}\nif (scoped === 0 && purged > 0 && inherited.size > 0) {\n  throw new Error(`Scope Courses: no course carries a block of its own, ${inherited.size} inherited instance(s) were found, and ${purged} indexed course(s) would be purged. That is a Vektra block installed site-wide instead of per course. Refusing to prune.`);\n}\n\nconsole.log(`[Scope Courses] ${scoped} in scope, ${purged} to purge, ${dropped} not indexed, ${frozen} frozen on error${ambiguous > 0 ? `, ${ambiguous} whose block ownership could not be told apart from a category's` : ''}.`);\nif (out.length === 0) {\n  console.log('[Scope Courses] nothing to do: no course carries the Vektra block and none of the unscoped ones is in the index.');\n}\n\nreturn out;\n"
+      }
+    },
+    {
       "parameters": {
         "options": {}
       },
@@ -88,8 +144,41 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        720,
+        960,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "out-of-scope",
+              "leftValue": "={{ $json._outOfScope }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "out-of-scope",
+      "name": "Out of scope?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        240
       ]
     },
     {
@@ -131,33 +220,33 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
-        240
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// A teacher opts a module out of the index by putting this tag in its title.\n// Matched case-insensitively anywhere in the title, because the title is written\n// by a person: \"[no-ai] Lezione 3\" and \"Lezione 3 [NO-AI]\" must both work.\n// Set INGEST_OPT_OUT_TAG to an empty string to disable the feature entirely.\nconst OPT_OUT_TAG = ($('Config').first().json.optOutTag || '').toLowerCase();\n\nconst SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\nconst namespace = slugify(rawShortname, courseId);\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\n// Safety: if Moodle returned an error or unexpected format, abort with _moodleError flag.\n// Returning files:[] would cause Dedup&Diff to mark ALL stored files as deleted — catastrophic.\nif (!Array.isArray(sections)) {\n  const raw = JSON.stringify(sections).slice(0, 200);\n  return [{ json: { _moodleError: true, errorDetail: raw, courseId, namespace, files: [] } }];\n}\n\nconst files = [];\n// Counted so Dedup & Diff can tell \"no files because a teacher excluded them\"\n// apart from \"no files because Moodle is down\" — the two look identical\n// downstream, and only the second one must suppress deletions.\nlet modulesSeen = 0;\nlet modulesExcluded = 0;\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    modulesSeen++;\n\n    // Opt-out wins over everything else this module could contribute: both its\n    // documents and, for a page, its transcript.\n    if (OPT_OUT_TAG && (mod.name || '').toLowerCase().includes(OPT_OUT_TAG)) {\n      modulesExcluded++;\n      continue;\n    }\n\n    // Page modules carry their HTML body as index.html with a NULL mimetype,\n    // so SUPPORTED_MIMES can never match it. Emit it as a transcript\n    // candidate; the video id is only discoverable after downloading the HTML.\n    // Deliberately NOT followed by `continue`: slide PDFs are attached to page\n    // modules alongside index.html, and skipping the loop below would silently\n    // stop ingesting all of them.\n    if (mod.modname === 'page') {\n      const index = mod.contents.find(\n        c => c.type === 'file' && c.filename === 'index.html' && c.fileurl\n      );\n      if (index) {\n        files.push({\n          _kind: 'page',\n          // Visibility is a property of the MODULE, not of the file: hiding a\n          // module leaves index.html byte-identical, so this is the only signal\n          // that the material must stop being cited.\n          hidden: mod.visible === 0,\n          fileurl: index.fileurl,\n          filename: `${mod.name}.md`,\n          uniqueFilename: `mod${mod.id}_transcript.md`,\n          filesize: index.filesize,\n          timemodified: index.timemodified,\n          mimetype: 'text/markdown',\n          moduleId: mod.id,\n          moduleName: mod.name,\n          sectionName: section.name,\n          courseId,\n          namespace\n        });\n      }\n    }\n\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        hidden: mod.visible === 0,\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files, modulesSeen, modulesExcluded } }];"
-      },
-      "id": "extract-files",
-      "name": "Extract Files",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
         1200,
         240
       ]
     },
     {
       "parameters": {
-        "jsCode": "const fs = require('fs');\n// Path comes from Config, which refuses to run without it. No default here:\n// a shared fallback is what let two instances delete each other's documents.\nconst STATE_FILE = $('Config').first().json.statePath;\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) { return { courseFiles: {} }; } }\n\nconst input = $input.first().json;\nconst namespace = input.namespace;\nconst courseId = input.courseId;\n\n// Abort if Moodle returned an error — never compute deletions from an empty file list.\nif (input._moodleError) {\n  return [{ json: { courseId, namespace, toIngest: [], toDelete: [], unchanged: [], _moodleError: true, errorDetail: input.errorDetail, summary: { new: 0, updated: 0, removed: 0, unchanged: 0 } } }];\n}\n\nconst state = readState();\nif (!state.courseFiles) state.courseFiles = {};\n\nconst currentFiles = input.files || [];\nconst storedFiles = state.courseFiles[namespace] || {};\n\n// Safety: if Moodle returned a valid but empty file list while we have stored files,\n// something is wrong (course temporarily inaccessible, WS token issue, etc.).\n// Skip ALL deletions to avoid wiping Qdrant data on a false signal.\n// Threshold is configurable via DELETION_SAFETY_THRESHOLD env var (default 3).\n// Set to 0 to disable the safety net entirely.\nconst parsedThreshold = parseInt($env.DELETION_SAFETY_THRESHOLD ?? '3', 10);\nconst DELETION_SAFETY_THRESHOLD = Number.isFinite(parsedThreshold) && parsedThreshold >= 0 ? parsedThreshold : 3;\n// An empty file list has two very different causes. Moodle being unreachable\n// must suppress deletions; a teacher tagging every module in the course must\n// NOT — that is the opt-out doing exactly its job, and suppressing it would\n// leave the excluded material in the index forever. Extract Files reports how\n// many modules it saw and excluded, which is what tells the two apart.\nconst excludedEmptiedCourse = (input.modulesExcluded || 0) > 0\n  && (input.modulesSeen || 0) === (input.modulesExcluded || 0);\nif (DELETION_SAFETY_THRESHOLD > 0 && currentFiles.length === 0 && !excludedEmptiedCourse && Object.keys(storedFiles).length >= DELETION_SAFETY_THRESHOLD) {\n  console.log(`[Dedup & Diff] Empty-course safety triggered for namespace=${namespace}: ${Object.keys(storedFiles).length} stored files preserved (threshold=${DELETION_SAFETY_THRESHOLD}).`);\n  // Populate `unchanged` with minimal entries for each preserved file so the\n  // final Ingestion Summary reports the correct unchanged count instead of 0.\n  // Without this, the only signal that the safety triggered is the console.log\n  // above (visible only in the n8n execution detail, not in the summary).\n  const safetyUnchanged = Object.entries(storedFiles).map(([fileurl, stored]) => ({\n    fileurl,\n    filename: stored.filename,\n    uniqueFilename: stored.filename,\n    _safetyPreserved: true,\n  }));\n  return [{ json: { courseId, namespace, toIngest: [], toDelete: [], unchanged: safetyUnchanged, _emptyCourseSafe: true, summary: { new: 0, updated: 0, removed: 0, unchanged: safetyUnchanged.length } } }];\n}\n\nconst toIngest = [];\nconst toDelete = [];\nconst unchanged = [];\nconst currentFileUrls = new Set(currentFiles.map(f => f.fileurl));\n\nfor (const file of currentFiles) {\n  const stored = storedFiles[file.fileurl];\n  // Visibility belongs in the change signature alongside timemodified. Hiding a\n  // module does not touch the file, so timemodified alone would classify the\n  // flip as unchanged, the document would never be re-ingested, and its\n  // hidden_from_students metadata would stay stale forever — the source would\n  // keep being cited to students. Re-ingesting without deleting first does not\n  // help: the API returns \"exists\" on an unchanged content hash and ignores the\n  // metadata of that request (measured). The 'updated' branch below already\n  // deletes the old document first, which is what makes the flip take effect.\n  const storedHidden = stored ? (stored.hidden === true) : false;\n  const fileHidden = file.hidden === true;\n\n  if (!stored) {\n    toIngest.push({ ...file, action: 'new' });\n  } else if (stored.timemodified !== file.timemodified || storedHidden !== fileHidden) {\n    toIngest.push({ ...file, action: 'updated', old_document_id: stored.document_id });\n  } else {\n    unchanged.push({ ...file, action: 'unchanged' });\n  }\n}\n\nfor (const [fileurl, stored] of Object.entries(storedFiles)) {\n  if (!currentFileUrls.has(fileurl)) {\n    toDelete.push({\n      fileurl,\n      filename: stored.filename,\n      document_id: stored.document_id,\n      namespace,\n      action: 'removed'\n    });\n  }\n}\n\nreturn [{\n  json: {\n    courseId,\n    namespace,\n    toIngest,\n    toDelete,\n    unchanged,\n    modulesExcluded: input.modulesExcluded || 0,\n    summary: {\n      new: toIngest.filter(f => f.action === 'new').length,\n      updated: toIngest.filter(f => f.action === 'updated').length,\n      removed: toDelete.length,\n      unchanged: unchanged.length\n    }\n  }\n}];"
+        "jsCode": "// A teacher opts a module out of the index by putting this tag in its title.\n// Matched case-insensitively anywhere in the title, because the title is written\n// by a person: \"[no-ai] Lezione 3\" and \"Lezione 3 [NO-AI]\" must both work.\n// Set INGEST_OPT_OUT_TAG to an empty string to disable the feature entirely.\nconst OPT_OUT_TAG = ($('Config').first().json.optOutTag || '').toLowerCase();\n\nconst SUPPORTED_MIMES = [\n  'application/pdf',\n  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'text/markdown'\n];\n\nconst courseItem = $('Loop Courses').item;\nconst courseId = courseItem.json.id;\nconst rawShortname = courseItem.json.shortname || `course-${courseId}`;\nfunction slugify(s, id) {\n  const slug = s\n    .normalize('NFD').replace(/\\p{M}/gu, '')\n    .toLowerCase()\n    .replace(/[^0-9a-z_-]+/g, '-')\n    .replace(/-{2,}/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .substring(0, 50);\n  return slug || `course-${id}`;\n}\nconst namespace = slugify(rawShortname, courseId);\n\n// A course whose Vektra block was removed is not \"a course with no files\" — it\n// is a course whose whole index must go. Scope Courses marks it, and this hands\n// Dedup & Diff the shape it needs to compute the removals.\n//\n// `Out of scope?` routes these items here directly, so no content request is\n// made for them and $input holds the course item rather than a Moodle response.\n// Nothing below this line runs for them, which is the point: neverError covers\n// non-2xx answers but not transport failures, and a timeout on a request whose\n// result is discarded anyway would stop the node before the removals were ever\n// computed — leaving a withdrawn course in the index because the network\n// hiccupped.\nif (courseItem.json._outOfScope === true) {\n  return [{ json: { courseId, namespace, files: [], modulesSeen: 0, modulesExcluded: 0, _outOfScope: true } }];\n}\n\nconst response = $input.first();\nconst sections = response.json.body || response.json;\n\n// Safety: if Moodle returned an error or unexpected format, abort with _moodleError flag.\n// Returning files:[] would cause Dedup&Diff to mark ALL stored files as deleted — catastrophic.\nif (!Array.isArray(sections)) {\n  const raw = JSON.stringify(sections).slice(0, 200);\n  return [{ json: { _moodleError: true, errorDetail: raw, courseId, namespace, files: [] } }];\n}\n\nconst files = [];\n// Counted so Dedup & Diff can tell \"no files because a teacher excluded them\"\n// apart from \"no files because Moodle is down\" — the two look identical\n// downstream, and only the second one must suppress deletions.\nlet modulesSeen = 0;\nlet modulesExcluded = 0;\nfor (const section of sections) {\n  if (!section.modules) continue;\n  for (const mod of section.modules) {\n    if (!mod.contents) continue;\n    modulesSeen++;\n\n    // Opt-out wins over everything else this module could contribute: both its\n    // documents and, for a page, its transcript.\n    if (OPT_OUT_TAG && (mod.name || '').toLowerCase().includes(OPT_OUT_TAG)) {\n      modulesExcluded++;\n      continue;\n    }\n\n    // Page modules carry their HTML body as index.html with a NULL mimetype,\n    // so SUPPORTED_MIMES can never match it. Emit it as a transcript\n    // candidate; the video id is only discoverable after downloading the HTML.\n    // Deliberately NOT followed by `continue`: slide PDFs are attached to page\n    // modules alongside index.html, and skipping the loop below would silently\n    // stop ingesting all of them.\n    if (mod.modname === 'page') {\n      const index = mod.contents.find(\n        c => c.type === 'file' && c.filename === 'index.html' && c.fileurl\n      );\n      if (index) {\n        files.push({\n          _kind: 'page',\n          // Visibility is a property of the MODULE, not of the file: hiding a\n          // module leaves index.html byte-identical, so this is the only signal\n          // that the material must stop being cited.\n          hidden: mod.visible === 0,\n          fileurl: index.fileurl,\n          filename: `${mod.name}.md`,\n          uniqueFilename: `mod${mod.id}_transcript.md`,\n          filesize: index.filesize,\n          timemodified: index.timemodified,\n          mimetype: 'text/markdown',\n          moduleId: mod.id,\n          moduleName: mod.name,\n          sectionName: section.name,\n          courseId,\n          namespace\n        });\n      }\n    }\n\n    for (const content of mod.contents) {\n      if (content.type !== 'file') continue;\n      if (!SUPPORTED_MIMES.includes(content.mimetype)) continue;\n      files.push({\n        hidden: mod.visible === 0,\n        fileurl: content.fileurl,\n        filename: content.filename,\n        uniqueFilename: `mod${mod.id}_${content.filename}`,\n        filesize: content.filesize,\n        timemodified: content.timemodified,\n        mimetype: content.mimetype,\n        moduleId: mod.id,\n        moduleName: mod.name,\n        sectionName: section.name,\n        courseId,\n        namespace\n      });\n    }\n  }\n}\n\nreturn [{ json: { courseId, namespace, files, modulesSeen, modulesExcluded } }];"
+      },
+      "id": "extract-files",
+      "name": "Extract Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n// Path comes from Config, which refuses to run without it. No default here:\n// a shared fallback is what let two instances delete each other's documents.\nconst STATE_FILE = $('Config').first().json.statePath;\nfunction readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch(e) { return { courseFiles: {} }; } }\n\nconst input = $input.first().json;\nconst namespace = input.namespace;\nconst courseId = input.courseId;\n\n// Abort if Moodle returned an error — never compute deletions from an empty file list.\nif (input._moodleError) {\n  return [{ json: { courseId, namespace, toIngest: [], toDelete: [], unchanged: [], _moodleError: true, errorDetail: input.errorDetail, summary: { new: 0, updated: 0, removed: 0, unchanged: 0 } } }];\n}\n\nconst state = readState();\nif (!state.courseFiles) state.courseFiles = {};\n\nconst currentFiles = input.files || [];\nconst storedFiles = state.courseFiles[namespace] || {};\n\n// Safety: if Moodle returned a valid but empty file list while we have stored files,\n// something is wrong (course temporarily inaccessible, WS token issue, etc.).\n// Skip ALL deletions to avoid wiping Qdrant data on a false signal.\n// Threshold is configurable via DELETION_SAFETY_THRESHOLD env var (default 3).\n// Set to 0 to disable the safety net entirely.\nconst parsedThreshold = parseInt($env.DELETION_SAFETY_THRESHOLD ?? '3', 10);\nconst DELETION_SAFETY_THRESHOLD = Number.isFinite(parsedThreshold) && parsedThreshold >= 0 ? parsedThreshold : 3;\n// An empty file list has two very different causes. Moodle being unreachable\n// must suppress deletions; a teacher tagging every module in the course must\n// NOT — that is the opt-out doing exactly its job, and suppressing it would\n// leave the excluded material in the index forever. Extract Files reports how\n// many modules it saw and excluded, which is what tells the two apart.\nconst excludedEmptiedCourse = (input.modulesExcluded || 0) > 0\n  && (input.modulesSeen || 0) === (input.modulesExcluded || 0);\n// Losing the Vektra block is the third cause of an empty file list, and like the\n// opt-out it is deliberate: the course was taken out of scope on purpose and the\n// whole namespace has to go. Suppressing these deletions would leave the removed\n// course answerable forever, which is exactly what the block is meant to control.\nconst outOfScopeCourse = input._outOfScope === true;\nif (DELETION_SAFETY_THRESHOLD > 0 && currentFiles.length === 0 && !excludedEmptiedCourse && !outOfScopeCourse && Object.keys(storedFiles).length >= DELETION_SAFETY_THRESHOLD) {\n  console.log(`[Dedup & Diff] Empty-course safety triggered for namespace=${namespace}: ${Object.keys(storedFiles).length} stored files preserved (threshold=${DELETION_SAFETY_THRESHOLD}).`);\n  // Populate `unchanged` with minimal entries for each preserved file so the\n  // final Ingestion Summary reports the correct unchanged count instead of 0.\n  // Without this, the only signal that the safety triggered is the console.log\n  // above (visible only in the n8n execution detail, not in the summary).\n  const safetyUnchanged = Object.entries(storedFiles).map(([fileurl, stored]) => ({\n    fileurl,\n    filename: stored.filename,\n    uniqueFilename: stored.filename,\n    _safetyPreserved: true,\n  }));\n  return [{ json: { courseId, namespace, toIngest: [], toDelete: [], unchanged: safetyUnchanged, _emptyCourseSafe: true, summary: { new: 0, updated: 0, removed: 0, unchanged: safetyUnchanged.length } } }];\n}\n\nconst toIngest = [];\nconst toDelete = [];\nconst unchanged = [];\nconst currentFileUrls = new Set(currentFiles.map(f => f.fileurl));\n\nfor (const file of currentFiles) {\n  const stored = storedFiles[file.fileurl];\n  // Visibility belongs in the change signature alongside timemodified. Hiding a\n  // module does not touch the file, so timemodified alone would classify the\n  // flip as unchanged, the document would never be re-ingested, and its\n  // hidden_from_students metadata would stay stale forever — the source would\n  // keep being cited to students. Re-ingesting without deleting first does not\n  // help: the API returns \"exists\" on an unchanged content hash and ignores the\n  // metadata of that request (measured). The 'updated' branch below already\n  // deletes the old document first, which is what makes the flip take effect.\n  const storedHidden = stored ? (stored.hidden === true) : false;\n  const fileHidden = file.hidden === true;\n\n  if (!stored) {\n    toIngest.push({ ...file, action: 'new' });\n  } else if (stored.timemodified !== file.timemodified || storedHidden !== fileHidden) {\n    toIngest.push({ ...file, action: 'updated', old_document_id: stored.document_id });\n  } else {\n    unchanged.push({ ...file, action: 'unchanged' });\n  }\n}\n\nfor (const [fileurl, stored] of Object.entries(storedFiles)) {\n  if (!currentFileUrls.has(fileurl)) {\n    toDelete.push({\n      fileurl,\n      filename: stored.filename,\n      document_id: stored.document_id,\n      namespace,\n      action: 'removed'\n    });\n  }\n}\n\nreturn [{\n  json: {\n    courseId,\n    namespace,\n    toIngest,\n    toDelete,\n    unchanged,\n    modulesExcluded: input.modulesExcluded || 0,\n    _outOfScope: outOfScopeCourse,\n    summary: {\n      new: toIngest.filter(f => f.action === 'new').length,\n      updated: toIngest.filter(f => f.action === 'updated').length,\n      removed: toDelete.length,\n      unchanged: unchanged.length\n    }\n  }\n}];"
       },
       "id": "dedup-diff",
       "name": "Dedup & Diff",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
+        1680,
         240
       ]
     },
@@ -189,7 +278,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1680,
+        1920,
         240
       ]
     },
@@ -202,7 +291,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1920,
+        2160,
         120
       ]
     },
@@ -234,7 +323,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2160,
+        2400,
         360
       ]
     },
@@ -247,7 +336,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2400,
+        2640,
         240
       ]
     },
@@ -260,7 +349,7 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        2640,
+        2880,
         240
       ]
     },
@@ -273,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2880,
+        3120,
         480
       ]
     },
@@ -286,33 +375,33 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2880,
+        3120,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// No files to ingest — return single item with unchanged and deletion info\nconst input = $input.first().json;\n\n// When Dedup & Diff propagated _moodleError (Moodle WS returned a non-array\n// body for this course), surface a single failed courseResult so the final\n// Ingestion Summary increments totalFailed and the operator sees the cause.\n// Without this the empty-arrays case below would silently report zeros and\n// hide the Moodle outage.\nif (input._moodleError) {\n  const preview = (input.errorDetail || 'unexpected response').toString().substring(0, 200);\n  return [{\n    json: {\n      courseResults: [{\n        file_name: `course-${input.courseId}`,\n        namespace: input.namespace,\n        courseId: input.courseId,\n        action: 'sync',\n        status: 'failed',\n        error: `Moodle course fetch failed: ${preview}`\n      }],\n      resultCount: 1\n    }\n  }];\n}\n\nconst unchangedFiles = (input.unchanged || []).map(f => ({\n  file_name: f.uniqueFilename || f.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'unchanged',\n  status: 'skipped'\n}));\nconst deleteItems = (input.deleteResults || []).map(d => ({\n  file_name: d.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'removed',\n  status: d.status === 'deleted' ? 'completed' : 'failed',\n  error: d.error || null\n}));\nconst allResults = [...deleteItems, ...unchangedFiles];\nreturn [{ json: { courseResults: allResults, resultCount: allResults.length,\n                  modulesExcluded: input.modulesExcluded || 0 } }];"
+        "jsCode": "// No files to ingest — return single item with unchanged and deletion info\nconst input = $input.first().json;\n\n// When Dedup & Diff propagated _moodleError (Moodle WS returned a non-array\n// body for this course), surface a single failed courseResult so the final\n// Ingestion Summary increments totalFailed and the operator sees the cause.\n// Without this the empty-arrays case below would silently report zeros and\n// hide the Moodle outage.\nif (input._moodleError) {\n  const preview = (input.errorDetail || 'unexpected response').toString().substring(0, 200);\n  return [{\n    json: {\n      courseResults: [{\n        file_name: `course-${input.courseId}`,\n        namespace: input.namespace,\n        courseId: input.courseId,\n        action: 'sync',\n        status: 'failed',\n        error: `Moodle course fetch failed: ${preview}`\n      }],\n      resultCount: 1\n    }\n  }];\n}\n\nconst unchangedFiles = (input.unchanged || []).map(f => ({\n  file_name: f.uniqueFilename || f.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'unchanged',\n  status: 'skipped'\n}));\nconst deleteItems = (input.deleteResults || []).map(d => ({\n  file_name: d.filename,\n  namespace: input.namespace,\n  courseId: input.courseId,\n  action: 'removed',\n  status: d.status === 'deleted' ? 'completed' : 'failed',\n  error: d.error || null\n}));\nconst allResults = [...deleteItems, ...unchangedFiles];\n// A course counts as having left the index only once every deletion it needed\n// actually succeeded. Handle Deletions reports delete_failed and keeps the state\n// entry so the next run retries, so claiming the course is gone would tell an\n// operator the opposite of what happened.\nconst allDeletionsSucceeded = (input.deleteResults || []).every(d => d.status === 'deleted');\nreturn [{ json: { courseResults: allResults, resultCount: allResults.length,\n                  modulesExcluded: input.modulesExcluded || 0,\n                  _outOfScope: input._outOfScope === true && allDeletionsSucceeded } }];"
       },
       "id": "no-changes",
       "name": "No Changes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2400,
+        2640,
         600
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Aggregate results from all courses\nconst items = $input.all();\n\nlet totalNew = 0, totalUpdated = 0, totalRemoved = 0;\nlet totalUnchanged = 0, totalFailed = 0;\nlet totalExcluded = 0;\nlet totalSkipped = 0;\nconst details = [];\n\nfor (const item of items) {\n  // Course-level: modules a teacher opted out of the index by title tag.\n  // Reported so an operator can tell the tag working from the extractor broken.\n  totalExcluded += item.json.modulesExcluded || 0;\n  const results = item.json.courseResults || [item.json];\n  for (const d of results) {\n    if (d.action === 'new' && (d.status === 'completed' || d.status === 'new')) totalNew++;\n    else if (d.action === 'updated' && (d.status === 'completed' || d.status === 'new')) totalUpdated++;\n    else if (d.action === 'removed' && d.status === 'completed') totalRemoved++;\n    // Order matters: the No Changes node emits unchanged files with\n    // action 'unchanged' AND status 'skipped', so the unchanged test has to\n    // win. Only pages that carried no video embed reach the skipped test,\n    // and those arrive with action 'new' or 'updated'.\n    else if (d.action === 'unchanged') totalUnchanged++;\n    else if (d.status === 'skipped') totalSkipped++;\n    else if (d.status === 'failed' || d.status === 'timeout') totalFailed++;\n\n    if (d.file_name || d.filename) {\n      details.push({\n        file: d.file_name || d.filename,\n        namespace: d.namespace,\n        action: d.action || 'unknown',\n        status: d.status || 'n/a',\n        document_id: d.document_id || null,\n        error: d.error || null\n      });\n    }\n  }\n}\n\nconst summary = `Sync complete: ${totalNew} new, ${totalUpdated} updated, ${totalRemoved} removed, ${totalUnchanged} unchanged, ${totalSkipped} skipped, ${totalExcluded} opted out, ${totalFailed} failed`;\nconsole.log(summary);\n\nreturn [{\n  json: {\n    summary,\n    totals: { new: totalNew, updated: totalUpdated, removed: totalRemoved, unchanged: totalUnchanged, skipped: totalSkipped, excluded: totalExcluded, failed: totalFailed },\n    details\n  }\n}];\n"
+        "jsCode": "// Aggregate results from all courses\nconst items = $input.all();\n\nlet totalNew = 0, totalUpdated = 0, totalRemoved = 0;\nlet totalUnchanged = 0, totalFailed = 0;\nlet totalExcluded = 0;\nlet totalSkipped = 0;\n// Courses that left the index because their Vektra block was removed. Counted\n// per course, not per file: the files themselves are already in totalRemoved,\n// and an operator needs to see that a whole course went, not just that the\n// removal count jumped.\nlet totalPurgedCourses = 0;\nconst details = [];\n\nfor (const item of items) {\n  // Course-level: modules a teacher opted out of the index by title tag.\n  // Reported so an operator can tell the tag working from the extractor broken.\n  totalExcluded += item.json.modulesExcluded || 0;\n  if (item.json._outOfScope === true) totalPurgedCourses++;\n  const results = item.json.courseResults || [item.json];\n  for (const d of results) {\n    if (d.action === 'new' && (d.status === 'completed' || d.status === 'new')) totalNew++;\n    else if (d.action === 'updated' && (d.status === 'completed' || d.status === 'new')) totalUpdated++;\n    else if (d.action === 'removed' && d.status === 'completed') totalRemoved++;\n    // Order matters: the No Changes node emits unchanged files with\n    // action 'unchanged' AND status 'skipped', so the unchanged test has to\n    // win. Only pages that carried no video embed reach the skipped test,\n    // and those arrive with action 'new' or 'updated'.\n    else if (d.action === 'unchanged') totalUnchanged++;\n    else if (d.status === 'skipped') totalSkipped++;\n    else if (d.status === 'failed' || d.status === 'timeout') totalFailed++;\n\n    if (d.file_name || d.filename) {\n      details.push({\n        file: d.file_name || d.filename,\n        namespace: d.namespace,\n        action: d.action || 'unknown',\n        status: d.status || 'n/a',\n        document_id: d.document_id || null,\n        error: d.error || null\n      });\n    }\n  }\n}\n\nconst purgedNote = totalPurgedCourses > 0 ? `, ${totalPurgedCourses} course(s) left the index` : '';\nconst summary = `Sync complete: ${totalNew} new, ${totalUpdated} updated, ${totalRemoved} removed, ${totalUnchanged} unchanged, ${totalSkipped} skipped, ${totalExcluded} opted out, ${totalFailed} failed${purgedNote}`;\nconsole.log(summary);\n\nreturn [{\n  json: {\n    summary,\n    totals: { new: totalNew, updated: totalUpdated, removed: totalRemoved, unchanged: totalUnchanged, skipped: totalSkipped, excluded: totalExcluded, failed: totalFailed, purgedCourses: totalPurgedCourses },\n    details\n  }\n}];\n"
       },
       "id": "ingestion-summary",
       "name": "Ingestion Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3360,
+        3600,
         0
       ]
     }
@@ -345,7 +434,7 @@
       "main": [
         [
           {
-            "node": "Loop Courses",
+            "node": "Get Course Blocks",
             "type": "main",
             "index": 0
           }
@@ -363,7 +452,7 @@
         ],
         [
           {
-            "node": "Get Course Contents",
+            "node": "Out of scope?",
             "type": "main",
             "index": 0
           }
@@ -517,6 +606,46 @@
         [
           {
             "node": "Get Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Course Blocks": {
+      "main": [
+        [
+          {
+            "node": "Scope Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scope Courses": {
+      "main": [
+        [
+          {
+            "node": "Loop Courses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Out of scope?": {
+      "main": [
+        [
+          {
+            "node": "Extract Files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Course Contents",
             "type": "main",
             "index": 0
           }

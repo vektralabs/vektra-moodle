@@ -20,6 +20,116 @@
 
 ## Planned
 
+### DEBT-011: Block ownership is inferred, because the web service will not say
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+**Origin**: CodeRabbit review of PR #35 (Security & Privacy, Major)
+
+**Context**: FEAT-010 decides whether a course carries the Vektra block from
+`core_block_get_course_blocks`, which reports a block inherited from a site or
+category context under every course beneath it. The response carries no parent
+context — `instanceid`, `name`, `region`, `positionid`, `collapsible`,
+`dockable`, `weight`, `visible`, and nothing else — so ownership is inferred
+from cardinality: an instance id seen under more than one course is inherited.
+
+**Where the inference fails**: a category holding exactly **one** course. Its
+inherited block is seen once, is indistinguishable from that course's own block,
+and the course is indexed when it should not be. A lookup that fails elsewhere
+can also push a genuinely inherited block down to one sighting.
+
+**Narrowed, not closed**: the courses returned by `core_course_get_courses`
+carry `categoryid`, so the run can tell exactly which courses are alone in their
+category — the precise set where a single sighting stops being evidence — and
+logs each by name. Those courses are still indexed, because refusing them would
+break every course legitimately alone in its category, but the doubt is now a
+named line in the log rather than an invisible one. Deciding it still needs the
+data below.
+
+**Blast radius**: one course indexed that should not be — against the whole
+installation the test does catch. Not a reason to leave it: on an ateneo Moodle
+one course of material reaching students who should not see it is the same class
+of problem the scoping exists to prevent.
+
+**The fix**: have the plugin report ownership rather than infer it. A web-service
+function in `block_vektra` can query `mdl_block_instances` joined to
+`mdl_context` and return the courses whose block sits on the **course** context
+(`contextlevel = 50`), which settles the question outright and in one call
+instead of one per course. It also removes the per-course fan-out — about fifty
+requests a run on `mooc.unical.it`.
+
+That means shipping a plugin version before the workflow can rely on it, so the
+inference stays as the fallback for installations running an older plugin.
+
+**Risk accepted to ship FEAT-010**: the review thread on PR #35 was resolved by
+hand rather than by a fix, deliberately and on the record. CodeRabbit's closing
+position is the correct one and is quoted here so nobody has to reconstruct it:
+
+> The deliberate false-negative trade-off is clear. However, it does not meet
+> the original requirement to prevent indexing from ambiguous ownership data.
+> DEBT-011 remains the required path to determine ownership reliably.
+
+What was weighed: the exposure is one course indexed that should not be, it is
+now named in the run log, and it is reversible by moving the block. Against that,
+closing it properly means a plugin release on both instances inside two days of a
+demo. The trade was taken for the demo, not for good.
+
+**This is the debt**: the run can name the courses it cannot decide about, and
+nothing more. Until the plugin reports ownership, a Vektra block on a category
+holding one course indexes that course, and no run will ever say it was wrong to.
+
+**Acceptance criteria**:
+- [ ] The plugin exposes the courses carrying the block, by course context
+- [ ] The workflow prefers it and falls back to the inference when it is absent
+- [ ] A block on a category holding one course does not scope that course in
+- [ ] The fallback path keeps its probes
+- [ ] The singleton-category warning goes away once ownership is known, rather
+      than staying as noise beside a signal that no longer needs it
+
+---
+
+### DEBT-010: Only the first course with files is ingested in a multi-course run
+
+**Status**: planned | **Priority**: high | **Created**: 2026-09-10
+**Origin**: surfaced while testing FEAT-010, which finally put two courses with
+files through the pipeline in one run
+
+**Context**: with two courses in scope, `Dedup & Diff` correctly reported work
+for both — `psicologia-generale` 35 new, `no-vektra-test` 1 new — but
+`Process Single File` ran 36 times and every one of them belonged to the first
+course. The second course's file was never processed. `Merge Course Results`
+then emitted two items, the second containing the first course's 35 results
+again, so `Ingestion Summary` reported 70 skipped instead of 35.
+
+**Not caused by FEAT-010**: the same run on the pre-change workflow from
+`develop` produced identical numbers — same 36 executions, same missing file,
+same doubled count. The scoping change only decides which courses enter the
+loop.
+
+**Likely cause**: `Loop Files` is a `splitInBatches` node that keeps its state
+for the whole execution. Once its loop has completed for the first course it
+reports done immediately for the next one, so the second course's items are
+never iterated and its `Merge Course Results` collects the previous course's
+output. `splitInBatches` has a reset option for exactly this.
+
+**What is not yet known, and matters**: whether this reproduces under the
+schedule trigger or only under `n8n execute` on the CLI, which is how it was
+observed. The evidence points at the CLI being a factor rather than the cause:
+the server holds documents for `abilitazione-insegnamento` and
+`storia-ambiente` alongside `psicologia-generale`, so more than one course has
+been ingested there at some point. That must be established before the fix, or
+the fix will be aimed at the wrong thing.
+
+**Why it matters**: if it does reproduce on a schedule, then on any Moodle with
+more than one scoped course only one of them is ever indexed, silently, and the
+summary's numbers hide it by double-counting. FEAT-010 makes multi-course runs
+the normal case rather than the exception.
+
+**Acceptance criteria**:
+- [ ] Reproduced (or ruled out) under the schedule trigger, not only the CLI
+- [ ] Every scoped course's files are processed in a single run
+- [ ] `Ingestion Summary` counts each file once
+- [ ] A probe covers a two-course run where both courses have files to ingest
+
 ### DEBT-009: The mooc.unical.it ingestion token is bound to a personal account
 
 **Status**: planned | **Priority**: medium | **Created**: 2026-09-10
@@ -276,7 +386,6 @@ one is not.
 **Acceptance criteria**:
 - [ ] The language reaches the transcript request from the course rather than the environment
 - [ ] A missing track for the requested language is distinguishable in the summary from a service failure
-
 ---
 
 ### DEBT-003: Credentials travel in cleartext between the ingestion containers
@@ -370,6 +479,72 @@ processed.
 
 ## Completed
 
+### FEAT-010: Index only the courses that carry the Vektra block
+
+**Status**: completed | **Priority**: high | **Created**: 2026-09-10 | **Completed**: 2026-09-10
+**Branch**: `feat/ingest-scope-by-block`
+**Numbering**: the commits on that branch say FEAT-008, which was free when the
+branch started and was claimed by another item while it was open. Renumbered
+here rather than rewriting the history, because the review replies on PR #35
+cite commit hashes.
+**Origin**: the pipeline indexed every course; on `mooc.unical.it` that is ~50
+courses, the whole university
+
+**Context**: `Filter Courses` excluded only the site course, so every course on
+the installation was ingested. The wanted model is self-service: a teacher adds
+the Vektra block to a course and its material is indexed on the next run; they
+remove the block and it comes out. The namespace list on the engine side is not
+a usable signal — ingest and token creation both create namespaces — so the
+signal has to come from Moodle, and the block is it.
+
+**Implementation**: two nodes between `Filter Courses` and `Loop Courses`.
+`Get Course Blocks` calls `core_block_get_course_blocks` once per course;
+`Scope Courses` decides what happens to each. A course with its own block passes
+through unchanged. A course with no block that is not in the index is dropped
+and costs nothing further. A course with no block that **is** in the index is
+marked `_outOfScope` and travels the normal deletion path. A course whose lookup
+failed is left out of the run entirely.
+
+Two existing nodes needed one line each: `Extract Files` returns an empty file
+list for an `_outOfScope` course, and `Dedup & Diff` exempts it from the
+empty-course safety net, the same way the opt-out tag is exempt.
+
+**The finding that shaped it**: filtering a course out does not remove it from
+the index — it freezes it. `Dedup & Diff` runs per course, so a course that
+never reaches `Loop Courses` is never compared against the state and never
+produces deletions. Its stale index would keep answering students forever.
+"Remove the block and it comes out" therefore had to be written, not assumed.
+
+**Two ways the signal can lie, both handled**:
+- A block placed on the site or a category with *show in subcontexts* is
+  reported under every course beneath it. Measured: a block inserted in the
+  system context made a course with no block of its own report `vektra`. It is
+  distinguishable because the inherited instance id is the same under every
+  course, while a per-course block's id is unique to its course.
+- Moodle answers a web-service exception with HTTP 200 and an `exception` body.
+  Read as "no block", a failing token would prune every course at once. This is
+  not hypothetical: the `mooc.unical.it` token belongs to a person's account
+  (see DEBT-009), so all lookups can start failing together.
+
+**Verified**: 27 logic probes (`Scope Courses`, `Dedup & Diff`, `Extract Files`,
+`Ingestion Summary`), plus three runs on the live local stack:
+- two courses, one with the block — only that one entered the loop, the other
+  was dropped, nothing was deleted
+- the same two with the block added to the second — both entered scope
+- the block removed from the second while its document was in the index — the
+  document was deleted from Vektra (`deleted_at` set, `deletion_reason
+  user_request`), its state entry dropped, the empty-course net did not fire,
+  and the summary reported `1 course(s) left the index`
+
+The response contract was confirmed on Moodle 5.1.3 locally, on mooc2 (5.1.4) by
+the ops session, and for `mooc.unical.it` (4.3.3) by diffing
+`blocks/classes/external.php` between `MOODLE_403_STABLE` and 5.1 — the file is
+identical, so the `name` field carries the same value there.
+
+**Deployment prerequisite**: `core_block_get_course_blocks` must be added to the
+`n8n Ingestion` web service on each instance. The service id differs between
+installations (2 on one, 3 on the other).
+
 ### BUG-018: dev-stack Moodle wwwroot points at localhost, breaking n8n calls
 
 **Status**: completed | **Priority**: high | **Created**: 2026-09-07 | **Completed**: 2026-09-08
@@ -439,7 +614,6 @@ and the failure it prevents is silent and slow.
 
 **Regression guard**: `n8n/README.md` documents it, and the harness asserts that
 generated instances never carry a hardcoded state path.
-
 ---
 
 ### FEAT-007: One workflow template for several Moodle instances

@@ -19,6 +19,15 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **n8n — only courses with the Vektra block are indexed** (FEAT-010): the
+  pipeline asks Moodle which blocks each course carries and indexes only those
+  with the Vektra block, instead of every course on the installation. Adding the
+  block to a course indexes its material on the next run; removing the block
+  deletes that material from the index. Requires
+  `core_block_get_course_blocks` on the `n8n Ingestion` web service. A block
+  inherited from a site or category context does not count as opting in, and a
+  failed lookup leaves the course's index untouched rather than pruning it.
+
 - **n8n — one template, many Moodle instances** (FEAT-007): instance identity
   moved into a `Config` node at the head of the workflow, and the JSON to import
   is generated per instance from a single template
