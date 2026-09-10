@@ -20,6 +20,44 @@
 
 ## Planned
 
+### DEBT-009: The mooc.unical.it ingestion token is bound to a personal account
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+**Surfaced by**: token verification for the scoping feature (block-detection)
+
+**Context**: the web-service token n8n uses to read `mooc.unical.it` belongs to a
+**named person's Moodle account** (userid 3, site admin), not a dedicated service
+account. On mooc2 the equivalent token belongs to the generic `admin`. Measured
+while verifying token identity before the scoping work — not assumed.
+
+A token inherits the identity and capabilities of its user. Bound to a person,
+it dies the day that account is disabled, suspended, has its tokens revoked on a
+password reset, or is deleted — and ingestion then **stops with no error**, the
+same silent-failure shape as DEBT-007. It also attributes every automated read
+to that person in the audit trail.
+
+**Pre-existing, and not yet live**: the token was created this way before the
+scoping change; enabling `core_block_get_course_blocks` did not introduce it. The
+mooc workflow is not deployed (waiting on the scoping feature), so the token is
+not in production use. The risk becomes real at mooc go-live.
+
+**Remedy**: create a dedicated Moodle service account (e.g. `vektra-bot`),
+generate the token from it, and repoint `MOOC_MOODLE_WS_TOKEN`. The catch: the
+account must **keep** the capability to see hidden courses and modules
+(`moodle/course:viewhiddencourses` and the view-hidden-activity capability the
+service's functions require) — a locked-down account without them would silently
+stop ingesting hidden material, breaking FEAT-006 (meeting point 1). So it is a
+service account scoped to the ingestion functions, not a minimal one. Documented
+in the install guide (`guida-installazione-vektra-moodle.md` §3.5).
+
+**Acceptance criteria**:
+- [ ] A dedicated Moodle service account owns the token used for `mooc.unical.it` ingestion
+- [ ] The account retains the capabilities the four WS functions need, including reading hidden courses and activities
+- [ ] The personal-account token is revoked
+- [ ] Any other production instance is checked for the same pattern
+
+---
+
 ### DEBT-008: Deleting one file removes a document another file still needs
 
 **Status**: planned | **Priority**: high | **Created**: 2026-09-10
