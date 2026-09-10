@@ -20,6 +20,54 @@
 
 ## Planned
 
+### DEBT-007: The pipeline never reconciles its state file against the index
+
+**Status**: planned | **Priority**: medium | **Created**: 2026-09-10
+
+**Context**: change detection asks one question — has `timemodified` moved since
+the state file recorded it — and never asks whether the document it claims to
+have ingested still exists in Vektra. Anything that removes documents on the
+Vektra side is therefore invisible: a reset, a migration, a restore from an
+older backup, a namespace dropped by hand.
+
+Observed on the development stack, where the state file survived a previous
+Vektra database:
+
+```
+PDF documents in source_documents (live or deleted):    0
+PDF documents the state file claimed ingested:         35
+of those 35 document ids, present in Vektra:            0
+```
+
+All the slide material was missing from the index, and the workflow would never
+have re-ingested it: `timemodified` had not moved, so every run reported
+`unchanged`. No error, no failed row, no signal of any kind. The assistant
+answered from video transcripts alone and nobody could have said why.
+
+The server was checked and is aligned — 87 of 87 document ids present — so this
+is not an incident. It is a class of failure the pipeline cannot detect.
+
+**Repaired locally** by removing the state entries whose document id no longer
+resolved and letting the next run re-ingest them. That is the right remedy, but
+it is not a fix for the gap: someone has to suspect the problem first.
+
+**Possible shapes for a fix**, none obviously right:
+- A periodic reconciliation pass that asks Vektra which of the state's document
+  ids still exist and drops the rest, which costs one query per run
+- Verifying on write rather than on read, so a document that fails to appear is
+  never recorded as ingested
+- Accepting it and documenting the manual check, which is what exists today
+
+The first is cheap and catches the whole class. The third is honest but relies
+on someone thinking to look.
+
+**Acceptance criteria**:
+- [ ] A run detects state entries whose documents no longer exist in Vektra
+- [ ] Detection is reported rather than silently repaired, since mass deletion on the Vektra side may itself be the incident
+- [ ] The check is cheap enough to run every cycle, or is scheduled separately
+
+---
+
 ### DEBT-006: The server's n8n compose has drifted from the repository
 
 **Status**: planned | **Priority**: medium | **Created**: 2026-09-10
