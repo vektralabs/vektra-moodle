@@ -11,6 +11,16 @@ services:
       - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Rome}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - N8N_RUNNERS_TASK_TIMEOUT=900
+      # Execution retention. The ingestion runs on a schedule, so by default n8n
+      # would persist the full payload of every successful run forever, growing
+      # database.sqlite without bound until it fills the host partition and new
+      # executions start failing (observed: a 3.9 GB DB that filled /var and
+      # stalled all ingestion). Not saving successful runs keeps the DB tiny;
+      # errors are still kept for debugging, and a max age prunes what remains.
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=${EXECUTIONS_DATA_SAVE_ON_SUCCESS:-none}
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=${EXECUTIONS_DATA_SAVE_ON_ERROR:-all}
+      - EXECUTIONS_DATA_PRUNE=${EXECUTIONS_DATA_PRUNE:-true}
+      - EXECUTIONS_DATA_MAX_AGE=${EXECUTIONS_DATA_MAX_AGE:-168}
       - MOODLE_URL=${MOODLE_URL:-http://vektra-moodle}
       - MOODLE_WS_TOKEN=${MOODLE_WS_TOKEN}
       - VEKTRA_API_URL=${VEKTRA_API_URL:-http://vektra-stack-vektra-1:8000}
@@ -27,6 +37,9 @@ services:
       - MOOC_MOODLE_URL=${MOOC_MOODLE_URL:-}
       - MOOC_MOODLE_WS_TOKEN=${MOOC_MOODLE_WS_TOKEN:-}
       - MOOC_STATE_FILE_PATH=${MOOC_STATE_FILE_PATH:-}
+      - ELEARNING_MOODLE_URL=${ELEARNING_MOODLE_URL:-}
+      - ELEARNING_MOODLE_WS_TOKEN=${ELEARNING_MOODLE_WS_TOKEN:-}
+      - ELEARNING_STATE_FILE_PATH=${ELEARNING_STATE_FILE_PATH:-}
       - YTDLP_API_URL=${YTDLP_API_URL:-http://ytdlp-api:8000}
       - YTDLP_API_KEY=${YTDLP_API_KEY}
       - YTDLP_TRANSCRIPT_LANG=${YTDLP_TRANSCRIPT_LANG:-it}
