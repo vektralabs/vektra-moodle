@@ -41,6 +41,11 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Changed
 
+- **Moodle 5.2 declared supported.** `$plugin->supported` widened from
+  `[501, 501]` to `[501, 502]`, so the plugin installs on Moodle 5.2.x without
+  the "untested version" warning; `requires` stays at Moodle 5.1. Numeric
+  version stamp bumped to `2026101900`, release `0.6.1`.
+
 - **The workflow no longer defaults its state path.** `Config` refuses to start
   when the path is absent instead of falling back to a shared default. Two
   workflows on one state file each see the other's documents as present in state
