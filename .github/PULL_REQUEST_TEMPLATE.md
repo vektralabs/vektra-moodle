@@ -5,7 +5,7 @@
 ## Checklist
 
 - [ ] PHP syntax check passes (`find . -name '*.php' | xargs -n1 php -l`)
-- [ ] Tested on Moodle 5.1
+- [ ] Tested on Moodle 4.3 and 5.2
 - [ ] New behavior has been manually verified
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) and are signed
 - [ ] `CHANGELOG.md` has an `[Unreleased]` entry for any user-visible change
