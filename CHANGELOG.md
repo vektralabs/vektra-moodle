@@ -41,6 +41,12 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Changed
 
+- **Widget script URL now cache-busted by plugin version.** The block loads
+  `vektra-chat.js?v=<plugin version>` instead of a fixed URL, so browsers and
+  CDNs fetch the new widget after a plugin upgrade. Covers plugin and widget
+  released together; a widget-only update on the engine without a plugin bump
+  does not bust. Numeric version stamp bumped to `2026103000`.
+
 - **Moodle 5.2 declared supported.** `$plugin->supported` widened from
   `[501, 501]` to `[501, 502]`, so the plugin installs on Moodle 5.2.x without
   the "untested version" warning; `requires` stays at Moodle 5.1. Numeric

@@ -260,7 +260,9 @@ class block_vektra extends block_base {
         }
 
         // Inject widget script via Moodle's page API (renders in footer).
-        $widgeturl = rtrim($publicurl, '/') . '/static/learn/vektra-chat.js';
+        // Plugin version as query string busts browser/CDN caches on upgrade.
+        $pluginversion = get_config('block_vektra', 'version');
+        $widgeturl = rtrim($publicurl, '/') . '/static/learn/vektra-chat.js?v=' . $pluginversion;
 
         // Build token refresh URL with sesskey for CSRF protection.
         $refreshurl = new \moodle_url('/blocks/vektra/ajax.php', [
