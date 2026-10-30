@@ -36,13 +36,13 @@ jobs:
 
     steps:
       - name: Check out plugin
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: plugin
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           ini-values: max_input_vars=5000, opcache.enable_cli=1, opcache.jit=disable
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Behat faildump
         if: ${{ failure() && steps.behat.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: Behat faildump (${{ matrix.moodle-branch }}, PHP ${{ matrix.php }})
           path: ${{ github.workspace }}/moodledata/behat_dump
