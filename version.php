@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'block_vektra';
-$plugin->version   = 2026103000;
-$plugin->requires  = 2025100600; // Moodle 5.1.
-$plugin->supported = [501, 502]; // Moodle 5.1 - 5.2.
+$plugin->version   = 2026103001;
+$plugin->requires  = 2023100900; // Moodle 4.3.
+$plugin->supported = [403, 502]; // Moodle 4.3 - 5.2.
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.6.1';
+$plugin->release   = '0.6.2';

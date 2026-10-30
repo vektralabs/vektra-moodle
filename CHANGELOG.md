@@ -49,8 +49,9 @@ Convention (Keep a Changelog 1.1.0):
 
 - **Moodle 5.2 declared supported.** `$plugin->supported` widened from
   `[501, 501]` to `[501, 502]`, so the plugin installs on Moodle 5.2.x without
-  the "untested version" warning; `requires` stays at Moodle 5.1. Numeric
-  version stamp bumped to `2026101900`, release `0.6.1`.
+  the "untested version" warning. Numeric version stamp bumped to
+  `2026101900`, release `0.6.1`. (Superseded by the 4.3 - 5.2 range under
+  Fixed.)
 
 - **The workflow no longer defaults its state path.** `Config` refuses to start
   when the path is absent instead of falling back to a shared default. Two
@@ -60,6 +61,18 @@ Convention (Keep a Changelog 1.1.0):
   list is ever empty. `STATE_FILE_PATH` now has a default in
   `docker-compose.yml` so the existing instance is unaffected; a second instance
   must declare its own.
+
+### Fixed
+
+- **The plugin installs on Moodle 4.3 again.** `$plugin->requires` lowered from
+  Moodle 5.1 (`2025100600`) to Moodle 4.3 (`2023100900`) and `$plugin->supported`
+  widened to `[403, 502]`. The 5.1 floor had no technical cause: the plugin uses
+  no API newer than 4.3, and `mooc.unical.it` (4.3.3) already ran 0.6.0 from a
+  zip whose `version.php` was edited by hand. One `version.php` now serves both
+  `mooc.unical.it` (4.3) and `elearning.unical.it` (5.2), so no zip needs editing.
+  A new `Moodle Plugin CI` workflow installs the plugin on Moodle 4.3 / PHP 8.2
+  and Moodle 5.2 / PHP 8.4 and loads a course page carrying the block. Numeric
+  version stamp bumped to `2026103001`, release `0.6.2`.
 
 ### Security
 
