@@ -69,7 +69,7 @@ Before opening a PR:
 - [ ] PHP syntax check passes (`find . -name '*.php' -print0 | xargs -0 -n1 php -l`)
 - [ ] Moodle Code Style passes (CI runs `phpcs --standard=moodle` on every
       PR)
-- [ ] New behavior has been manually verified on Moodle 5.1
+- [ ] New behavior has been manually verified on Moodle 4.3 and 5.2
 - [ ] Commit messages follow Conventional Commits and are signed
 - [ ] `CHANGELOG.md` has an `[Unreleased]` entry for any user-visible change
 - [ ] PR description explains the change and motivation
