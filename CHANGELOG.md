@@ -41,6 +41,18 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Changed
 
+- **Widget script URL now cache-busted by plugin version.** The block loads
+  `vektra-chat.js?v=<plugin version>` instead of a fixed URL, so browsers and
+  CDNs fetch the new widget after a plugin upgrade. Covers plugin and widget
+  released together; a widget-only update on the engine without a plugin bump
+  does not bust. Numeric version stamp bumped to `2026103000`.
+
+- **Moodle 5.2 declared supported.** `$plugin->supported` widened from
+  `[501, 501]` to `[501, 502]`, so the plugin installs on Moodle 5.2.x without
+  the "untested version" warning. Numeric version stamp bumped to
+  `2026101900`, release `0.6.1`. (Superseded by the 4.3 - 5.2 range under
+  Fixed.)
+
 - **The workflow no longer defaults its state path.** `Config` refuses to start
   when the path is absent instead of falling back to a shared default. Two
   workflows on one state file each see the other's documents as present in state

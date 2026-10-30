@@ -1,0 +1,6 @@
+{
+  "id": "ingestElearningUnical",
+  "name": "Moodle-to-Vektra Ingestion — elearning.unical.it",
+  "envPrefix": "ELEARNING_",
+  "comment": "Third Moodle (elearning.unical.it, Moodle 5.2.1). Reads ELEARNING_MOODLE_URL, ELEARNING_MOODLE_WS_TOKEN and ELEARNING_STATE_FILE_PATH. n8n env is per-process, so each workflow needs a distinct name. ELEARNING_STATE_FILE_PATH must be its OWN file (/home/node/.n8n/moodle-ingest-state-elearning.json): sharing a state file with another instance makes both delete each other's documents and re-ingest in a loop. The id and name are deliberately host-specific so the workflow is easy to identify in the n8n list."
+}
