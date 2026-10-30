@@ -50,6 +50,18 @@ Convention (Keep a Changelog 1.1.0):
   `docker-compose.yml` so the existing instance is unaffected; a second instance
   must declare its own.
 
+### Fixed
+
+- **The plugin installs on Moodle 4.3 again.** `$plugin->requires` lowered from
+  Moodle 5.1 (`2025100600`) to Moodle 4.3 (`2023100900`) and `$plugin->supported`
+  widened to `[403, 502]`. The 5.1 floor had no technical cause: the plugin uses
+  no API newer than 4.3, and `mooc.unical.it` (4.3.3) already ran 0.6.0 from a
+  zip whose `version.php` was edited by hand. One `version.php` now serves both
+  `mooc.unical.it` (4.3) and `elearning.unical.it` (5.2), so no zip needs editing.
+  A new `Moodle Plugin CI` workflow installs the plugin on Moodle 4.3 / PHP 8.2
+  and Moodle 5.2 / PHP 8.4 and loads a course page carrying the block. Numeric
+  version stamp bumped to `2026103001`, release `0.6.2`.
+
 ### Security
 
 - **The second instance's web-service token leaves the workflow.** It was

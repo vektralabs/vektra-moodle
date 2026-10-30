@@ -4,7 +4,7 @@ AI course assistant for Moodle. Brings the [Vektra RAG](https://github.com/vektr
 
 ## Requirements
 
-- Moodle 5.1+
+- Moodle 4.3 - 5.2
 - PHP 8.2+
 - A running Vektra RAG instance with the Learn module enabled
 - Vektra RAG v0.5.0+ to use the per-course **Behavior** settings (grounding mode, source visibility). Earlier versions remain compatible: the form will gracefully degrade and skip the backend sync.
