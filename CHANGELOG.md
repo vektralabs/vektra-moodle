@@ -64,6 +64,12 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Fixed
 
+- **Release zip no longer ships development files**: the zip was built by
+  copying the whole checkout, so it carried `n8n/` (including the instance
+  configs of both production sites), `docker/`, `.claude/` and `.s2s/`. It is now
+  built with `git archive` and `.gitattributes` `export-ignore`, and CI fails
+  if the zip lists any of those paths or `CTX-MEMORY.md`.
+
 - **The plugin installs on Moodle 4.3 again.** `$plugin->requires` lowered from
   Moodle 5.1 (`2025100600`) to Moodle 4.3 (`2023100900`) and `$plugin->supported`
   widened to `[403, 502]`. The 5.1 floor had no technical cause: the plugin uses

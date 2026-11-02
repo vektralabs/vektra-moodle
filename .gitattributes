@@ -1,0 +1,15 @@
+# Files that exist in the repository but must not ship in the release zip.
+# The zip is built with `git archive` (release.yml), so only tracked, non-ignored files can ever land
+# in it; the release-zip job in ci.yml asserts the result.
+.github/          export-ignore
+.s2s/             export-ignore
+.claude/          export-ignore
+.superpowers/     export-ignore
+docker/           export-ignore
+docker-moodle43/  export-ignore
+n8n/              export-ignore
+CTX-MEMORY.md     export-ignore
+CONTRIBUTING.md   export-ignore
+*.local.md        export-ignore
+.gitattributes    export-ignore
+.gitignore        export-ignore

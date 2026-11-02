@@ -48,15 +48,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same command as release.yml: tracked files only, .gitattributes export-ignore applied.
       - name: Build zip
-        run: |
-          mkdir -p /tmp/vektra
-          rsync -a --exclude='.git' --exclude='.github' --exclude='.gitignore' . /tmp/vektra/
-          cd /tmp && zip -r vektra.zip vektra/
+        run: git archive --format=zip --prefix=vektra/ -o "$RUNNER_TEMP/vektra.zip" HEAD
 
-      - name: Validate structure
-        run: |
-          zipinfo /tmp/vektra.zip | head -20
-          # Must contain version.php at plugin root
-          unzip -l /tmp/vektra.zip | grep -q 'vektra/version.php'
-          echo "Release zip structure OK"
+      - name: Validate zip content
+        run: ./.github/scripts/assert-release-zip.sh "$RUNNER_TEMP/vektra.zip" vektra
