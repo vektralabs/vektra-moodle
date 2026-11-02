@@ -1,0 +1,192 @@
+{
+  "_doc": "Declarative catalogue for seed_assess_fixtures.php. Strings '@now+N' / '@now-N' are resolved to unix times at seed time; '{tag}' becomes m43/m52. Every hidden field carries a unique CANARY-<KIND>-<tag> token (see 'canary' keys). Expected values in the manifest and in the self-check are computed from THIS file, never read back from Moodle.",
+  "course": {"shortname": "EAASSESS", "fullname": "Assess bot fixtures"},
+
+  "users": [
+    {"key": "stu1", "role": "student", "firstname": "Alice", "lastname": "Alpha"},
+    {"key": "stu2", "role": "student", "firstname": "Bruno", "lastname": "Beta"},
+    {"key": "stu3", "role": "student", "firstname": "Carla", "lastname": "Gamma"},
+    {"key": "stu4", "role": "student", "firstname": "Dario", "lastname": "Delta"},
+    {"key": "stu5", "role": "student", "firstname": "Elena", "lastname": "Epsilon"},
+    {"key": "grader1", "role": "editingteacher", "firstname": "Gina", "lastname": "Grader"},
+    {"key": "grader2", "role": "teacher", "firstname": "Hugo", "lastname": "Grader"},
+    {"key": "tnocap", "role": "eaa_teacher_nograde", "firstname": "Ivo", "lastname": "NoGradeCap"}
+  ],
+  "groups": [
+    {"key": "G1", "members": ["stu1", "stu2"]},
+    {"key": "G2", "members": ["stu3"]}
+  ],
+  "scales": [
+    {"key": "quality", "scale": "Poor,Fair,Good,Excellent"}
+  ],
+
+  "questions": {
+    "tf":    {"qtype": "truefalse",   "which": null,            "mark": 1, "answers": {"right": "True", "wrong": "False"}},
+    "mc":    {"qtype": "multichoice", "which": "one_of_four",   "mark": 1, "answers": {"right": "One", "wrong": "Two"}},
+    "sa":    {"qtype": "shortanswer", "which": "frogtoad",      "mark": 1, "answers": {"right": "frog", "wrong": "dog"}},
+    "num":   {"qtype": "numerical",   "which": "pi",            "mark": 1, "answers": {"right": "3.14", "wrong": "42"}},
+    "es":    {"qtype": "essay",       "which": "plain",         "mark": 5},
+    "match": {"qtype": "match",       "which": "foursubq",      "mark": 1},
+    "multi": {"qtype": "multianswer", "which": "twosubq",       "mark": 1,
+              "overrides": {"questiontext": {"text": "VISIBLE-QTEXT-multi: The {1:SHORTANSWER:=Owl#Well done!~*#Wrong} and the {1:MULTICHOICE:Bow-wow~=Pussy-cat} went to sea.", "format": 1}}},
+    "gap":   {"qtype": "gapselect",   "which": "missingchoiceno", "mark": 1,
+              "overrides": {"questiontext": {"text": "The [[1]] sat on the [[2]].", "format": 1},
+                            "choices": [{"answer": "cat", "choicegroup": "1"}, {"answer": "mat", "choicegroup": "1"}]}},
+    "dd":    {"qtype": "ddwtos",      "which": "fox",           "mark": 1, "discussable": false},
+    "desc":  {"qtype": "description", "which": "info",          "mark": 0},
+    "zero":  {"qtype": "truefalse",   "which": null,            "mark": 0, "answers": {"right": "True", "wrong": "False"}}
+  },
+
+  "quizzes": [
+    {"key": "types", "name": "QZ types catalogue",
+     "settings": {"timelimit": 0, "grade": 10, "overduehandling": "autosubmit", "graceperiod": 0},
+     "close": "@now-3600", "open": "@now-7d", "review": "all",
+     "items": [["tf", 1], ["mc", 1], ["sa", 1], ["num", 1], ["es", 5], ["match", 1], ["multi", 1], ["gap", 1], ["dd", 1], ["desc", 0], ["zero", 0]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "wrong", "num": "right", "zero": "right"}}
+     ]},
+
+    {"key": "review_all", "name": "QZ review all visible",
+     "settings": {"timelimit": 1800, "grade": 10, "overduehandling": "graceperiod", "graceperiod": 600},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "overall_feedback": true,
+     "items": [["tf", 1], ["mc", 1], ["sa", 1], ["num", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "right", "num": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong", "sa": "wrong", "num": "wrong"}},
+       {"user": "stu2", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong", "sa": "wrong", "num": "wrong"}},
+       {"user": "stu3", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "right", "num": "right"}}
+     ],
+     "overrides": [
+       {"user": "stu2", "timeclose": "@now+7d", "timelimit": 3600},
+       {"group": "G2", "timeclose": "@now+2d", "timelimit": 5400}
+     ]},
+
+    {"key": "review_none", "name": "QZ review hidden",
+     "settings": {"timelimit": 1800, "grade": 10, "overduehandling": "graceperiod", "graceperiod": 600},
+     "close": "@now-3600", "open": "@now-7d", "review": "none", "overall_feedback": true, "grade_item_hidden": true,
+     "items": [["tf", 1], ["mc", 1], ["sa", 1], ["num", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "right", "num": "right"}},
+       {"user": "stu2", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong", "sa": "wrong", "num": "wrong"}}
+     ]},
+
+    {"key": "review_mixed", "name": "QZ review mixed",
+     "settings": {"timelimit": 1800, "grade": 10, "overduehandling": "graceperiod", "graceperiod": 600},
+     "close": "@now-3600", "open": "@now-7d", "review": "mixed", "overall_feedback": true,
+     "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "wrong"}}
+     ]},
+
+    {"key": "gm_highest", "name": "QZ grademethod highest tie", "settings": {"grade": 10, "grademethod": "highest"},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "wrong"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong"}}
+     ]},
+    {"key": "gm_first", "name": "QZ grademethod first", "settings": {"grade": 10, "grademethod": "first"},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "wrong"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong"}}
+     ]},
+    {"key": "gm_last", "name": "QZ grademethod last", "settings": {"grade": 10, "grademethod": "last"},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "wrong"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong"}}
+     ]},
+    {"key": "gm_average", "name": "QZ grademethod average", "settings": {"grade": 10, "grademethod": "average"},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "wrong"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right"}},
+       {"user": "stu1", "state": "finished", "answers": {"tf": "wrong", "mc": "wrong"}}
+     ]},
+
+    {"key": "inprogress", "name": "QZ attempt in progress",
+     "settings": {"timelimit": 3600, "grade": 10, "overduehandling": "graceperiod", "graceperiod": 300},
+     "close": "@now+7d", "open": "@now-1d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "inprogress", "answers": {"tf": "right"}},
+       {"user": "stu2", "state": "inprogress", "answers": {}}
+     ]},
+    {"key": "overdue", "name": "QZ attempt overdue with grace",
+     "settings": {"timelimit": 600, "grade": 10, "overduehandling": "graceperiod", "graceperiod": 300},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "overdue", "answers": {"tf": "right"}}
+     ]},
+    {"key": "abandoned", "name": "QZ attempt abandoned",
+     "settings": {"timelimit": 600, "grade": 10, "overduehandling": "autoabandon", "graceperiod": 0},
+     "close": "@now-3600", "open": "@now-7d", "review": "all", "items": [["tf", 1], ["mc", 1]],
+     "attempts": [
+       {"user": "stu1", "state": "abandoned", "answers": {"tf": "right"}}
+     ]},
+    {"key": "essay", "name": "QZ essay needs grading",
+     "settings": {"grade": 10}, "close": "@now-3600", "open": "@now-7d", "review": "all",
+     "items": [["tf", 1], ["es", 5]],
+     "attempts": [
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "es": "text:VISIBLE essay answer of stu1"},
+        "manual": {"es": {"mark": 4}}},
+       {"user": "stu2", "state": "finished", "answers": {"tf": "right", "es": "text:VISIBLE essay answer of stu2"}}
+     ]}
+  ],
+
+  "assigns": [
+    {"key": "cutoff", "name": "AS with cut-off", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "submissions": [{"user": "stu1", "onlinetext": true}, {"user": "stu2", "onlinetext": true}],
+     "extensions": [{"user": "stu2", "extensionduedate": "@now+3d"}],
+     "overrides": [{"user": "stu4", "duedate": "@now+5d", "cutoffdate": "@now+6d"}]},
+    {"key": "nocutoff", "name": "AS without cut-off", "duedate": "@now-2d", "cutoffdate": 0,
+     "submissions": [{"user": "stu1", "onlinetext": true}]},
+    {"key": "team", "name": "AS team submission", "duedate": "@now-2d", "cutoffdate": "@now-1d", "teamsubmission": 1,
+     "submissions": [{"user": "stu1", "onlinetext": true}]},
+    {"key": "guide", "name": "AS marking guide", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "guide": {"name": "Guide G", "criteria": {
+       "CRIT-Structure": {"description": "Structure of the report", "descriptionmarkers": "Marker hint structure", "maxscore": 50},
+       "CRIT-Content": {"description": "Content of the report", "descriptionmarkers": "Marker hint content", "maxscore": 50}}},
+     "submissions": [{"user": "stu1", "onlinetext": true}]},
+    {"key": "rubric_vis", "name": "AS rubric descriptors visible", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "rubric": {"name": "Rubric V", "showdescriptionstudent": 1,
+       "criteria": {"Clarity": {"poor": 0, "ok": 5, "good": 10}, "Method": {"none": 0, "some": 5, "full": 10}},
+       "grade": {"user": "stu1", "levels": {"Clarity": 10, "Method": 5}}},
+     "submissions": [{"user": "stu1", "onlinetext": true}]},
+    {"key": "rubric_hidden", "name": "AS rubric descriptors hidden", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "rubric": {"name": "Rubric H", "showdescriptionstudent": 0,
+       "criteria": {"Clarity": {"poor": 0, "ok": 5, "good": 10}, "Method": {"none": 0, "some": 5, "full": 10}},
+       "grade": {"user": "stu1", "levels": {"Clarity": 5, "Method": 5}}},
+     "submissions": [{"user": "stu1", "onlinetext": true}]},
+    {"key": "simple", "name": "AS simple direct grade", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "submissions": [{"user": "stu1", "onlinetext": true}],
+     "grades": [{"user": "stu1", "grade": 85}]},
+    {"key": "scale", "name": "AS scale grade", "duedate": "@now-2d", "cutoffdate": "@now-1d", "scale": "quality",
+     "submissions": [{"user": "stu1", "onlinetext": true}],
+     "grades": [{"user": "stu1", "grade": 3}]},
+    {"key": "wf", "name": "AS marking workflow", "duedate": "@now-2d", "cutoffdate": "@now-1d", "markingworkflow": 1,
+     "submissions": [{"user": "stu1", "onlinetext": true}, {"user": "stu2", "onlinetext": true}],
+     "grades": [{"user": "stu1", "grade": 80, "workflowstate": "released"},
+                {"user": "stu2", "grade": 60, "workflowstate": "inmarking"}]},
+    {"key": "hiddengrade", "name": "AS hidden grade item", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "submissions": [{"user": "stu1", "onlinetext": true}],
+     "grades": [{"user": "stu1", "grade": 70}], "grade_item_hidden": 1},
+    {"key": "hiddenuntil", "name": "AS grade hidden until future", "duedate": "@now-2d", "cutoffdate": "@now-1d",
+     "submissions": [{"user": "stu1", "onlinetext": true}],
+     "grades": [{"user": "stu1", "grade": 65}], "grade_item_hidden": "@now+7d"},
+    {"key": "files", "name": "AS submissions with files", "duedate": "@now-2d", "cutoffdate": "@now-1d", "maxfiles": 20,
+     "submissions": [
+       {"user": "stu1", "onlinetext": true, "files": ["pdf_text", "pdf_scan", "docx", "odt", "pptx"]},
+       {"user": "stu2", "onlinetext": true, "files": ["many11"]}]},
+    {"key": "restricted", "name": "AS hidden for stu3", "duedate": "@now+2d", "cutoffdate": 0,
+     "hidden_for": "stu3", "submissions": []}
+  ],
+
+  "login_as": {"admin_logs_in_as": "stu1"}
+}
