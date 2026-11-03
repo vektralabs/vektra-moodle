@@ -172,7 +172,7 @@ assessment bot (plan `assess-moodle-ws`) there are two more, independent environ
 one version-generic file, `compose.moodle.yml`, plus an env file per version. Containers, volumes
 and loopback ports never collide with the 5.1 setup or with each other.
 
-| | Moodle 4.3.11+ | Moodle 5.2.4+ |
+| | Moodle 4.3.11+ | Moodle 5.2.4 |
 |---|---|---|
 | env file | `env.43` | `env.52` |
 | container | `vektra-moodle43` | `vektra-moodle52` |
