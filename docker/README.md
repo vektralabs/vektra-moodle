@@ -186,7 +186,7 @@ below from this `docker/` directory (replace `NN` with `43` or `52`).
 ### Bring-up (one command per version)
 
 ```bash
-make moodle43-up      # or: make moodle52-up   (build, install Moodle, wait for the healthcheck)
+make moodle43-up      # or: make moodle52-up   (build and start; Moodle installs in the background)
 ```
 
 The first start downloads the pinned Moodle tarball (SHA-256 checked in the env file) and runs the
