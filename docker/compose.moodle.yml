@@ -52,6 +52,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       N8N_WS_TOKEN: "${N8N_WS_TOKEN:-}"
       ASSESS_WS_TOKEN: "${ASSESS_WS_TOKEN:-}"
+      VEKTRA_DEV: "1"   # opt-in read by provision/assess_service_account.php (dev only)
     volumes:
       - moodle_data:/var/moodledata
       - ./php.ini:/usr/local/etc/php/conf.d/custom.ini:ro

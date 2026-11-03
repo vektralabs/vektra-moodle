@@ -21,9 +21,9 @@ moodle52-reset: ## removes the 5.2 database and moodledata volumes
 # Provisioning, dev deps and fixtures (run after the container is up and installed).
 # The tokens in fixtures/out/provision-*.json are secrets: that directory is git-ignored.
 moodle43-provision:
-	docker exec -u www-data -e ASSESS_OUT=/opt/vektra/fixtures/out/provision-m43.json vektra-moodle43 php /opt/vektra/provision/assess_service_account.php
+	docker exec -u www-data -e VEKTRA_DEV=1 -e ASSESS_OUT=/opt/vektra/fixtures/out/provision-m43.json vektra-moodle43 php /opt/vektra/provision/assess_service_account.php
 moodle52-provision:
-	docker exec -u www-data -e ASSESS_OUT=/opt/vektra/fixtures/out/provision-m52.json vektra-moodle52 php /opt/vektra/provision/assess_service_account.php
+	docker exec -u www-data -e VEKTRA_DEV=1 -e ASSESS_OUT=/opt/vektra/fixtures/out/provision-m52.json vektra-moodle52 php /opt/vektra/provision/assess_service_account.php
 moodle43-devdeps:
 	docker exec -u root vektra-moodle43 bash /opt/vektra/fixtures/prepare_dev_deps.sh
 moodle52-devdeps:

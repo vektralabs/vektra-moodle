@@ -11,12 +11,22 @@
 //   assess_bad_admin    site administrator, token on the vektra_assess service
 //   assess_bad_grader   grade-write role, token on a service that lists a grade-write function
 //   vektra_ingest_acct  stand-in for the ingestion account, token on a stub service
-// None of them is created on a production site: this directory is dev-only.
+// None of them is created on a production site: this directory is dev-only, and the script refuses
+// to run unless wwwroot is on loopback or VEKTRA_DEV=1 is set.
 define('CLI_SCRIPT', true);
 require('/var/www/html/config.php');
 require_once($CFG->libdir . '/clilib.php');
 require_once($CFG->dirroot . '/user/lib.php');
 require_once($CFG->dirroot . '/webservice/lib.php');
+
+// Dev-only guard: this script makes a site administrator and issues permanent tokens. Refuse to run
+// unless the site is on loopback or the operator opted in explicitly with VEKTRA_DEV=1.
+$vkhost = strtolower((string)parse_url($CFG->wwwroot, PHP_URL_HOST));
+if (!in_array($vkhost, ['localhost', '127.0.0.1', '::1', '[::1]'], true) && getenv('VEKTRA_DEV') !== '1') {
+    fwrite(STDERR, "REFUSING to run: wwwroot host '$vkhost' is not localhost/127.0.0.1/::1 and VEKTRA_DEV=1 is not set.\n"
+        . "This script creates a site administrator and permanent web service tokens; it is for dev environments only.\n");
+    exit(1);
+}
 
 // One source of truth for the service function list. READ functions only: REQ-079 as amended
 // 2026-11-01 makes "no grade-write function in the list" the control. Printed for the docs.
