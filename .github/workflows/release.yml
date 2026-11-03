@@ -22,7 +22,7 @@ jobs:
         run: git archive --format=zip --prefix=vektra/ -o "$RUNNER_TEMP/vektra.zip" HEAD
 
       - name: Validate zip content
-        run: ./.github/scripts/assert-release-zip.sh "$RUNNER_TEMP/vektra.zip" vektra
+        run: bash ./.github/scripts/assert-release-zip.sh "$RUNNER_TEMP/vektra.zip" vektra
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -17,6 +17,14 @@ Convention (Keep a Changelog 1.1.0):
 
 ## [Unreleased]
 
+### Security
+
+- **Release zip content**: release zips are now built with `git archive` and the
+  content is asserted against an allowlist of the plugin surface (with a
+  denylist as a second layer). Release assets published from earlier tags were
+  built by copying the whole repository and may contain `n8n/`, `docker/`,
+  `.claude/` and `.s2s/`; they should be audited.
+
 ### Added
 
 - **n8n — only courses with the Vektra block are indexed** (FEAT-010): the
