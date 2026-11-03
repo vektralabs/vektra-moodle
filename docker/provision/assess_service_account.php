@@ -44,6 +44,9 @@ const ASSESS_FUNCTIONS = [
     'core_grading_get_definitions', 'core_grading_get_gradingform_instances',
     'gradereport_user_get_grade_items',
 ];
+// Functions that a supported Moodle release may legitimately not register (checked on 4.3.11 and 5.2.4:
+// 4.3 lacks both). They are skipped with a warning; any other missing function aborts provisioning.
+const ASSESS_FUNCTIONS_OPTIONAL = ['mod_quiz_get_overrides', 'mod_quiz_get_user_quiz_attempts'];
 // Capabilities of the read-only role (ablation-verified in the spike: each one breaks a read).
 const ASSESS_CAPS = [
     'webservice/rest:use',
@@ -100,7 +103,14 @@ function vk_role(string $shortname, string $name, array $caps): int {
 }
 function vk_service(string $shortname, string $name, array $functions): stdClass {
     global $DB;
-    $functions = array_values(array_filter($functions, fn($f) => $DB->record_exists('external_functions', ['name' => $f])));
+    $missing = array_values(array_filter($functions, fn($f) => !$DB->record_exists('external_functions', ['name' => $f])));
+    $fatal = array_diff($missing, ASSESS_FUNCTIONS_OPTIONAL);
+    if ($fatal) {
+        fwrite(STDERR, "service $shortname: functions not registered on this Moodle release: " . implode(', ', $fatal) . "\n");
+        exit(1);
+    }
+    foreach ($missing as $f) { fwrite(STDERR, "service $shortname: skipping $f (not registered on this Moodle release)\n"); }
+    $functions = array_values(array_diff($functions, $missing));
     $service = $DB->get_record('external_services', ['shortname' => $shortname]);
     if (!$service) {
         $id = $DB->insert_record('external_services', (object)[
@@ -108,6 +118,11 @@ function vk_service(string $shortname, string $name, array $functions): stdClass
             'requiredcapability' => '', 'downloadfiles' => 1, 'uploadfiles' => 0, 'timecreated' => time(),
         ]);
         $service = $DB->get_record('external_services', ['id' => $id]);
+    } else if ((int)$service->enabled !== 1 || (int)$service->restrictedusers !== 1) {
+        // Idempotent rerun: restore a service that was disabled or opened to every user.
+        $DB->update_record('external_services', (object)['id' => $service->id, 'enabled' => 1, 'restrictedusers' => 1]);
+        $service->enabled = 1;
+        $service->restrictedusers = 1;
     }
     $DB->delete_records('external_services_functions', ['externalserviceid' => $service->id]);
     foreach ($functions as $f) {
@@ -190,4 +205,18 @@ $report = json_encode([
     ],
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 $out = getenv('ASSESS_OUT');
-if ($out) { file_put_contents($out, $report); chmod($out, 0600); echo "report written to $out\n"; } else { echo $report; }
+if ($out) {
+    // First run is `make moodleNN-provision`, before devdeps creates fixtures/out: create it (owner only).
+    $outdir = dirname($out);
+    if (!is_dir($outdir) && !mkdir($outdir, 0700, true) && !is_dir($outdir)) {
+        fwrite(STDERR, "cannot create $outdir for the report; run make moodleNN-devdeps first\n");
+        exit(1);
+    }
+    if (file_put_contents($out, $report) !== strlen($report) || !chmod($out, 0600)) {
+        fwrite(STDERR, "cannot write the report to $out (missing or not writable); tokens were NOT saved\n");
+        exit(1);
+    }
+    echo "report written to $out\n";
+} else {
+    echo $report;
+}
