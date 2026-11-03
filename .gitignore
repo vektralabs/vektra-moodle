@@ -52,3 +52,6 @@ test_curl.php
 
 # Subagent-driven development scratch
 .superpowers/
+
+# Assess bot fixtures: the seed wrapper writes manifest.json here (ids, canaries)
+docker/fixtures/out/

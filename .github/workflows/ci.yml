@@ -37,7 +37,7 @@ jobs:
           ./moodle-cs/vendor/bin/phpcs \
             --standard=moodle \
             --extensions=php \
-            --ignore=vendor,moodle-cs \
+            --ignore=vendor,moodle-cs,docker \
             --report=checkstyle \
             . | cs2pr
 
