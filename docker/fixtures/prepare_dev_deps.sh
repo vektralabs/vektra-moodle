@@ -8,7 +8,7 @@
 set -euo pipefail
 ROOT=/var/www/html   # composer.json lives here in 4.x and in 5.x (5.x serves from ROOT/public)
 OUT=/opt/vektra/fixtures/out
-mkdir -p "$OUT"; chmod 0777 "$OUT"
+mkdir -p "$OUT"; chown www-data:www-data "$OUT"; chmod 0700 "$OUT"
 
 if [ -f "$ROOT/vendor/autoload.php" ] && [ -f "$ROOT/vendor/bin/phpunit" ]; then
   echo "dev deps already installed in $ROOT/vendor"; exit 0

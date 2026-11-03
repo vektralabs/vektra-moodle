@@ -723,7 +723,11 @@ $m['canaries'] = $canaries;
 $m['seeded_false'] = $skipped;
 $m['checks'] = $checks;
 check_dir_exists($outdir);
-file_put_contents($manifestpath, json_encode($m, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+$manifestjson = json_encode($m, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+if (file_put_contents($manifestpath, $manifestjson) !== strlen($manifestjson)) {
+    fwrite(STDERR, "manifest write failed: $manifestpath. Reset the environment (make moodleNN-reset) before re-seeding.\n");
+    exit(1);
+}
 fwrite(STDERR, "seeded $tag: manifest written to $manifestpath\n");
 $finish($checks, $skipped);
 
