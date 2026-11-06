@@ -237,7 +237,9 @@ Moodle DB: row counts and values per fixture (attempts by state, overrides, exte
 grading instances, grade items, canaries, capabilities, module visibility). **It exits non-zero on any
 mismatch**, so a fixture that is silently missing can never look seeded. A fixture a version cannot
 seed is recorded as `"seeded": false` with a reason and printed loudly. Re-running is safe: when the
-course already exists nothing is seeded and only the self-check runs (exit 0 when it passes).
+course already exists nothing is seeded and only the self-check runs (exit 0 when it passes). The
+manifest records the SHA-256 of `fixtures.json`; when the catalogue has changed since the seed, the
+seeder exits 2 and asks for a reset instead of self-checking the old fixtures.
 
 `fixtures/out/` is git-ignored (it holds tokens). Seeding defines `BEHAT_TEST` after bootstrap to
 unlock the quiz generator; use it on these dev containers only.

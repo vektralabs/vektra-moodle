@@ -65,7 +65,10 @@ $resolve = function ($v) use (&$resolve, $tag, $now) {
     }
     return str_replace('{tag}', $tag, $v);
 };
-$catalogue = json_decode(file_get_contents(__DIR__ . '/fixtures.json'), true, 512, JSON_THROW_ON_ERROR);
+$catalogueraw = file_get_contents(__DIR__ . '/fixtures.json');
+$catalogue = json_decode($catalogueraw, true, 512, JSON_THROW_ON_ERROR);
+// The manifest records which catalogue seeded the environment: a different one needs a reset.
+$cataloguesha = hash('sha256', $catalogueraw);
 
 // ---------------------------------------------------------------------------------------------
 // Self-check runner (kinds: sql scalar, capability, module visibility). Used right after seeding
@@ -120,8 +123,14 @@ if ($checkonly || $exists) {
         fwrite(STDERR, "course exists but $manifestpath is missing: reset the environment (make moodleNN-reset) and re-seed\n");
         exit(2);
     }
-    fwrite(STDERR, "already seeded ($tag): seeding nothing, running self-check from the manifest\n");
     $mf = json_decode(file_get_contents($manifestpath), true, 512, JSON_THROW_ON_ERROR);
+    // A manifest from another catalogue (e.g. seeded before the burst fixture existed) would self-check only
+    // what it seeded and report success for fixtures that are not there.
+    if (($mf['catalogue_sha256'] ?? null) !== $cataloguesha) {
+        fwrite(STDERR, "already seeded ($tag) from a different fixtures.json: reset the environment (make moodleNN-reset) and re-seed\n");
+        exit(2);
+    }
+    fwrite(STDERR, "already seeded ($tag): seeding nothing, running self-check from the manifest\n");
     get_log_manager()->dispose();
     $finish($mf['checks'], $mf['seeded_false']);
 }
@@ -139,7 +148,8 @@ $qgen = $gen->get_plugin_generator('core_question');
 $checks = [];       // self-check list, persisted in the manifest
 $skipped = [];      // [{fixture, reason}] seeded:false entries
 $canaries = [];     // token => where it lives
-$m = ['release' => $CFG->release, 'version' => (string)$CFG->version, 'tag' => $tag, 'seeded_at' => $now];
+$m = ['release' => $CFG->release, 'version' => (string)$CFG->version, 'tag' => $tag, 'seeded_at' => $now,
+    'catalogue_sha256' => $cataloguesha];
 $m['ws_get_overrides_available'] = $DB->record_exists('external_functions', ['name' => 'mod_quiz_get_overrides']);
 
 $addcheck = function (string $label, string $sql, array $params, $expected) use (&$checks) {
