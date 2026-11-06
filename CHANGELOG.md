@@ -27,6 +27,12 @@ Convention (Keep a Changelog 1.1.0):
 
 ### Added
 
+- **Dev fixtures for the assessment bot**: a burst fixture (40 students with a
+  graded, released 10-file submission on one assignment, in a course of its own,
+  listed under `burst` in the seed manifest); graded responses for match,
+  multianswer, gapselect and drag-and-drop questions in the `types` quiz; the
+  `files` assignment of `stu1` graded and released.
+
 - **n8n — only courses with the Vektra block are indexed** (FEAT-010): the
   pipeline asks Moodle which blocks each course carries and indexes only those
   with the Vektra block, instead of every course on the installation. Adding the

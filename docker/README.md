@@ -220,6 +220,16 @@ question type and attempt state, grading methods, overrides, review-option varia
 cut-off / team / marking guide / rubric / marking workflow / hidden grades, submissions with PDF, scanned
 PDF, DOCX, ODT, PPTX and an 11-file submission, groups, graders, a teacher without grade capability, one
 `user_loggedinas` event). Every hidden field carries a unique `CANARY-<KIND>-<tag>` token.
+The `types` quiz attempt of `stu1` answers every auto-graded type, including match, multianswer,
+gapselect and drag-and-drop into text (those four with the question engine's own correct response), and
+the `files` assignment of `stu1` is graded and released.
+
+A second course, `EAASSESS-BURST`, holds the burst fixture: one assignment with a cut-off date (not a
+team submission, no marking workflow), 40 students `aas_bst01`..`aas_bst40`, each with a submitted,
+graded and released 10-file submission (the PDF, scanned PDF, DOCX, ODT and PPTX samples plus text
+files). It is written to the manifest as
+`"burst": {"cmid", "courseid", "assignid", "students": [<userids>], "files_per_submission": 10, ...}`.
+It lives in its own course so the main course's fixtures do not change.
 
 The seeder writes `fixtures/out/manifest-m43.json` / `manifest-m52.json` (ids, EXPECTED values taken
 from the catalogue, canaries, and the list of self-checks) and then verifies the seed directly in the
