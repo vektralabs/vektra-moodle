@@ -56,6 +56,11 @@ const ASSESS_CAPS = [
     'gradereport/user:view', 'moodle/grade:view',
     'mod/quiz:view', 'mod/quiz:viewreports', 'mod/quiz:reviewmyattempts', 'mod/quiz:viewoverrides',
     'mod/assign:view', 'mod/assign:viewgrades', 'moodle/role:review',
+    // Grader emails for transcript delivery (REQ-079 as amended for plan 10b): the narrowest one, verified
+    // live on 4.3 and 5.2. core_enrol_get_enrolled_users_with_capability returns email whatever the
+    // grader's maildisplay; moodle/user:viewalldetails does not, and moodle/site:viewuseridentity would
+    // expose every identity field the site configures.
+    'moodle/course:useremail',
 ];
 
 [$opts] = cli_get_params(['caps' => '', 'print-functions' => false]);
