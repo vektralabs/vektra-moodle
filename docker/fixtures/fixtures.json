@@ -32,7 +32,8 @@
     "gap":   {"qtype": "gapselect",   "which": "missingchoiceno", "mark": 1,
               "overrides": {"questiontext": {"text": "The [[1]] sat on the [[2]].", "format": 1},
                             "choices": [{"answer": "cat", "choicegroup": "1"}, {"answer": "mat", "choicegroup": "1"}]}},
-    "dd":    {"qtype": "ddwtos",      "which": "fox",           "mark": 1, "discussable": false},
+    "dd":    {"qtype": "ddwtos",      "which": "fox",           "mark": 1, "discussable": false,
+              "overrides": {"questiontext": {"text": "VISIBLE-QTEXT-dd: The [[1]] brown [[2]] jumped over the [[3]] dog.", "format": 1}}},
     "desc":  {"qtype": "description", "which": "info",          "mark": 0},
     "zero":  {"qtype": "truefalse",   "which": null,            "mark": 0, "answers": {"right": "True", "wrong": "False"}}
   },
@@ -43,7 +44,8 @@
      "close": "@now-3600", "open": "@now-7d", "review": "all",
      "items": [["tf", 1], ["mc", 1], ["sa", 1], ["num", 1], ["es", 5], ["match", 1], ["multi", 1], ["gap", 1], ["dd", 1], ["desc", 0], ["zero", 0]],
      "attempts": [
-       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "wrong", "num": "right", "zero": "right"}}
+       {"user": "stu1", "state": "finished", "answers": {"tf": "right", "mc": "right", "sa": "wrong", "num": "right", "zero": "right",
+                                                         "match": "right", "multi": "right", "gap": "right", "dd": "right"}}
      ]},
 
     {"key": "review_all", "name": "QZ review all visible",
@@ -183,10 +185,15 @@
     {"key": "files", "name": "AS submissions with files", "duedate": "@now-2d", "cutoffdate": "@now-1d", "maxfiles": 20,
      "submissions": [
        {"user": "stu1", "onlinetext": true, "files": ["pdf_text", "pdf_scan", "docx", "odt", "pptx"]},
-       {"user": "stu2", "onlinetext": true, "files": ["many11"]}]},
+       {"user": "stu2", "onlinetext": true, "files": ["many11"]}],
+     "grades": [{"user": "stu1", "grade": 80}]},
     {"key": "restricted", "name": "AS hidden for stu3", "duedate": "@now+2d", "cutoffdate": 0,
      "hidden_for": "stu3", "submissions": []}
   ],
 
-  "login_as": {"admin_logs_in_as": "stu1"}
+  "login_as": {"admin_logs_in_as": "stu1"},
+
+  "burst": {"course": {"shortname": "EAASSESS-BURST", "fullname": "Assess burst fixtures"},
+            "name": "AS burst 40 x 10 files", "students": 40, "files_per_submission": 10,
+            "duedate": "@now-2d", "cutoffdate": "@now-1d", "grade": 70}
 }

@@ -65,7 +65,10 @@ $resolve = function ($v) use (&$resolve, $tag, $now) {
     }
     return str_replace('{tag}', $tag, $v);
 };
-$catalogue = json_decode(file_get_contents(__DIR__ . '/fixtures.json'), true, 512, JSON_THROW_ON_ERROR);
+$catalogueraw = file_get_contents(__DIR__ . '/fixtures.json');
+$catalogue = json_decode($catalogueraw, true, 512, JSON_THROW_ON_ERROR);
+// The manifest records which catalogue seeded the environment: a different one needs a reset.
+$cataloguesha = hash('sha256', $catalogueraw);
 
 // ---------------------------------------------------------------------------------------------
 // Self-check runner (kinds: sql scalar, capability, module visibility). Used right after seeding
@@ -120,8 +123,14 @@ if ($checkonly || $exists) {
         fwrite(STDERR, "course exists but $manifestpath is missing: reset the environment (make moodleNN-reset) and re-seed\n");
         exit(2);
     }
-    fwrite(STDERR, "already seeded ($tag): seeding nothing, running self-check from the manifest\n");
     $mf = json_decode(file_get_contents($manifestpath), true, 512, JSON_THROW_ON_ERROR);
+    // A manifest from another catalogue (e.g. seeded before the burst fixture existed) would self-check only
+    // what it seeded and report success for fixtures that are not there.
+    if (($mf['catalogue_sha256'] ?? null) !== $cataloguesha) {
+        fwrite(STDERR, "already seeded ($tag) from a different fixtures.json: reset the environment (make moodleNN-reset) and re-seed\n");
+        exit(2);
+    }
+    fwrite(STDERR, "already seeded ($tag): seeding nothing, running self-check from the manifest\n");
     get_log_manager()->dispose();
     $finish($mf['checks'], $mf['seeded_false']);
 }
@@ -139,7 +148,8 @@ $qgen = $gen->get_plugin_generator('core_question');
 $checks = [];       // self-check list, persisted in the manifest
 $skipped = [];      // [{fixture, reason}] seeded:false entries
 $canaries = [];     // token => where it lives
-$m = ['release' => $CFG->release, 'version' => (string)$CFG->version, 'tag' => $tag, 'seeded_at' => $now];
+$m = ['release' => $CFG->release, 'version' => (string)$CFG->version, 'tag' => $tag, 'seeded_at' => $now,
+    'catalogue_sha256' => $cataloguesha];
 $m['ws_get_overrides_available'] = $DB->record_exists('external_functions', ['name' => 'mod_quiz_get_overrides']);
 
 $addcheck = function (string $label, string $sql, array $params, $expected) use (&$checks) {
@@ -281,6 +291,7 @@ foreach ($catalogue['quizzes'] as $qd) {
         $sum = 0.0;
         $slotstates = [];
         $essayanswered = false;
+        $engineright = [];   // slots answered with the question engine's own correct response
         foreach ($ad['answers'] as $qk => $val) {
             $def = $catalogue['questions'][$qk];
             $slot = $slotidx($qk);
@@ -289,6 +300,15 @@ foreach ($catalogue['quizzes'] as $qd) {
             if (strpos($val, 'text:') === 0) {
                 $resp[$slot] = substr($val, 5);
                 $essayanswered = true;
+            } else if (!isset($def['answers'])) {
+                // Types without catalogue answers (match, multianswer, gapselect, ddwtos): only "right", taken from
+                // the question engine, so the slot is graded with its full mark.
+                if ($val !== 'right') {
+                    throw new coding_exception("question $qk ({$def['qtype']}): only 'right' is supported without catalogue answers");
+                }
+                $engineright[] = $slot;
+                $sum += $mark;
+                $slotstates[$slot] = 'gradedright';
             } else {
                 $resp[$slot] = $def['answers'][$val];
                 if ($val === 'right') { $sum += $mark; }
@@ -297,6 +317,11 @@ foreach ($catalogue['quizzes'] as $qd) {
         }
         \core\session\manager::set_user($st);
         $att = $qzgen->create_attempt($qid, $st->id);
+        if ($engineright) {
+            $quba = \mod_quiz\quiz_attempt::create($att->id)->get_question_usage();
+            foreach ($engineright as $slot) { $quba->process_action($slot, $quba->get_correct_response($slot)); }
+            question_engine::save_questions_usage_by_activity($quba);
+        }
         $dofinish = $ad['state'] === 'finished';
         $qzgen->submit_responses($att->id, $resp, false, $dofinish);
         \core\session\manager::set_user(get_admin());
@@ -699,6 +724,65 @@ foreach ($catalogue['assigns'] as $ad) {
 
     $m['assigns'][$k] = ['id' => $aid, 'cmid' => (int)$as->cmid, 'name' => $ad['name'], 'seeded' => true, 'expected' => $exp,
         'submissions' => $subs, 'grades' => $grades];
+}
+
+// --- burst: one assignment, N students, each with a graded and released N-file submission ------------------
+// A course of its own, so the main course's fixtures and their recorded WS responses stay unchanged.
+if (!empty($catalogue['burst'])) {
+    $bd = $catalogue['burst'];
+    $bcourse = $gen->create_course(['shortname' => $bd['course']['shortname'], 'fullname' => $bd['course']['fullname']]);
+    $bas = $gen->create_module('assign', [
+        'course' => $bcourse->id, 'name' => $bd['name'], 'grade' => 100,
+        'allowsubmissionsfromdate' => $now - 10 * 86400, 'duedate' => $bd['duedate'], 'cutoffdate' => $bd['cutoffdate'],
+        'gradingduedate' => $now + 86400,
+        'assignsubmission_onlinetext_enabled' => 0, 'assignsubmission_file_enabled' => 1,
+        'assignsubmission_file_maxfiles' => $bd['files_per_submission'], 'assignsubmission_file_maxsizebytes' => 1048576,
+        'assignfeedback_comments_enabled' => 1, 'submissiondrafts' => 0, 'teamsubmission' => 0, 'markingworkflow' => 0,
+    ]);
+    $bactx = context_module::instance($bas->cmid);
+    [$bgcourse, $bgcm] = get_course_and_cm_from_cmid($bas->cmid, 'assign');
+    $bassign = new assign($bactx, $bgcm, $bgcourse);
+    // Each submission: the four readable samples, the scanned PDF, and text files up to N, all synthetic.
+    $samples = ['pdf_text', 'docx', 'odt', 'pptx', 'pdf_scan'];
+    $nfiles = (int)$bd['files_per_submission'];
+    $bstudents = [];
+    for ($i = 1; $i <= (int)$bd['students']; $i++) {
+        $key = sprintf('bst%02d', $i);
+        $bu = $gen->create_user(['username' => 'aas_' . $key, 'firstname' => 'Burst', 'lastname' => sprintf('Student %02d', $i),
+            'email' => 'aas_' . $key . '@example.invalid']);
+        $gen->enrol_user($bu->id, $bcourse->id, 'student');
+        $paths = [];
+        foreach (array_slice($samples, 0, $nfiles) as $fk) { $paths[] = $relpath($files[$fk]['path']); }
+        for ($f = count($paths) + 1; $f <= $nfiles; $f++) {
+            $p = sprintf('%s/burst_%s_%02d.txt', $tmpdir, $key, $f);
+            file_put_contents($p, "VISIBLE-BURST-$key-$f-$tag\n");
+            $paths[] = $relpath($p);
+        }
+        $asgen->create_submission(['userid' => $bu->id, 'cmid' => $bas->cmid, 'status' => 'submitted', 'file' => implode(',', $paths)]);
+        $d = new stdClass();
+        $d->attemptnumber = -1;
+        $d->sendstudentnotifications = 0;
+        $d->grade = $bd['grade'];
+        $d->assignfeedbackcomments_editor = ['text' => "VISIBLE-FEEDBACK-burst-$key-$tag", 'format' => FORMAT_HTML];
+        $bassign->save_grade($bu->id, $d);
+        $bstudents[] = (int)$bu->id;
+    }
+    $baid = (int)$bas->id;
+    $n = count($bstudents);
+    $addcheck('burst cutoffdate', "SELECT cutoffdate FROM {assign} WHERE id = ?", [$baid], $bd['cutoffdate']);
+    $addcheck('burst teamsubmission', "SELECT teamsubmission FROM {assign} WHERE id = ?", [$baid], 0);
+    $addcheck('burst markingworkflow (grades released on save)', "SELECT markingworkflow FROM {assign} WHERE id = ?", [$baid], 0);
+    $addcheck('burst students enrolled', "SELECT COUNT(1) FROM {user_enrolments} ue JOIN {enrol} e ON e.id = ue.enrolid
+        WHERE e.courseid = ? AND ue.status = 0", [$bcourse->id], $n);
+    $addcheck('burst submissions', "SELECT COUNT(1) FROM {assign_submission} WHERE assignment = ? AND latest = 1 AND status = 'submitted'",
+        [$baid], $n);
+    $addcheck('burst files', "SELECT COUNT(1) FROM {files} f JOIN {assign_submission} s ON s.id = f.itemid WHERE s.assignment = ?
+        AND f.component = 'assignsubmission_file' AND f.filearea = 'submission_files' AND f.filename <> '.'", [$baid], $n * $nfiles);
+    $addcheck('burst grades', "SELECT COUNT(1) FROM {assign_grades} WHERE assignment = ? AND grade = ?", [$baid, $bd['grade']], $n);
+    $addcheck('burst grade item visible', "SELECT hidden FROM {grade_items} WHERE courseid = ? AND itemmodule = 'assign' AND iteminstance = ?
+        AND itemnumber = 0", [$bcourse->id, $baid], 0);
+    $m['burst'] = ['cmid' => (int)$bas->cmid, 'courseid' => (int)$bcourse->id, 'assignid' => $baid, 'students' => $bstudents,
+        'files_per_submission' => $nfiles, 'grade' => $bd['grade'], 'cutoffdate' => $bd['cutoffdate']];
 }
 
 // --- one login-as event ---------------------------------------------------------------------------------

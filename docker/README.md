@@ -220,6 +220,16 @@ question type and attempt state, grading methods, overrides, review-option varia
 cut-off / team / marking guide / rubric / marking workflow / hidden grades, submissions with PDF, scanned
 PDF, DOCX, ODT, PPTX and an 11-file submission, groups, graders, a teacher without grade capability, one
 `user_loggedinas` event). Every hidden field carries a unique `CANARY-<KIND>-<tag>` token.
+The `types` quiz attempt of `stu1` answers every auto-graded type, including match, multianswer,
+gapselect and drag-and-drop into text (those four with the question engine's own correct response), and
+the `files` assignment of `stu1` is graded and released.
+
+A second course, `EAASSESS-BURST`, holds the burst fixture: one assignment with a cut-off date (not a
+team submission, no marking workflow), 40 students `aas_bst01`..`aas_bst40`, each with a submitted,
+graded and released 10-file submission (the PDF, scanned PDF, DOCX, ODT and PPTX samples plus text
+files). It is written to the manifest as
+`"burst": {"cmid", "courseid", "assignid", "students": [<userids>], "files_per_submission": 10, ...}`.
+It lives in its own course so the main course's fixtures do not change.
 
 The seeder writes `fixtures/out/manifest-m43.json` / `manifest-m52.json` (ids, EXPECTED values taken
 from the catalogue, canaries, and the list of self-checks) and then verifies the seed directly in the
@@ -227,7 +237,9 @@ Moodle DB: row counts and values per fixture (attempts by state, overrides, exte
 grading instances, grade items, canaries, capabilities, module visibility). **It exits non-zero on any
 mismatch**, so a fixture that is silently missing can never look seeded. A fixture a version cannot
 seed is recorded as `"seeded": false` with a reason and printed loudly. Re-running is safe: when the
-course already exists nothing is seeded and only the self-check runs (exit 0 when it passes).
+course already exists nothing is seeded and only the self-check runs (exit 0 when it passes). The
+manifest records the SHA-256 of `fixtures.json`; when the catalogue has changed since the seed, the
+seeder exits 2 and asks for a reset instead of self-checking the old fixtures.
 
 `fixtures/out/` is git-ignored (it holds tokens). Seeding defines `BEHAT_TEST` after bootstrap to
 unlock the quiz generator; use it on these dev containers only.
