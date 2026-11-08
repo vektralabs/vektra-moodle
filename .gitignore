@@ -20,6 +20,7 @@ logs/
 docker/.env
 .claude/settings.local.json
 CLAUDE.local.md
+.local/
 
 # Dependencies
 vendor/
