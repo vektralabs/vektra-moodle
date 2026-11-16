@@ -157,7 +157,8 @@ node n8n/tests/scope-by-block.mjs
 
 The probes read each node's source out of the workflow template and run it with
 n8n's globals stubbed, so they check the template itself rather than a copy of
-it. They cover the course scoping, the deletion diff, file extraction and the
+it. They cover the course scoping, the deletion diff, file extraction, the
+metadata sent with each ingest request (against a fake HTTP layer) and the
 summary counts.
 
 For a run against the real stack:
@@ -386,6 +387,22 @@ They are: a course whose lookup failed is left out of the run entirely, which
 leaves its index untouched. This matters because on `mooc.unical.it` the
 web-service token belongs to a person's account rather than a service account —
 if that account is disabled, every lookup fails at once.
+
+## Document metadata
+
+Every ingest request carries a flat JSON `metadata` form field:
+
+| Key | Sent | Value |
+|-----|------|-------|
+| `cmid` | always | Moodle course-module id (integer) the document came from, the same id as the `mod<id>_` prefix of the file name |
+| `hidden_from_students` | only for hidden modules | `true` (see below) |
+
+Metadata is part of change detection. The state file records the `cmid` each
+document was ingested with; a document whose stored entry has no `cmid` (ingested
+before the field existed) or a different one is classified `updated`, so its old
+document is deleted and it is ingested again with the new metadata, once. The
+mechanism is the same one that makes a visibility flip take effect, described
+below.
 
 ## Hidden modules
 
