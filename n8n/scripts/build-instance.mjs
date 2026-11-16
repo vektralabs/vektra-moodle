@@ -31,7 +31,9 @@ if (!cfg) throw new Error('template has no Config node — nothing to parameteri
 // opt-out tag is a convention taught to teachers, and it should read the same
 // across every Moodle of the same university.
 const prefix = inst.envPrefix ?? '';
-for (const v of ['MOODLE_URL', 'MOODLE_WS_TOKEN', 'STATE_FILE_PATH']) {
+// LMS_SITE_URL is instance identity too: it becomes the lms_site metadata, and
+// an unprefixed read would tag every instance's documents with the main site.
+for (const v of ['MOODLE_URL', 'MOODLE_WS_TOKEN', 'STATE_FILE_PATH', 'LMS_SITE_URL']) {
   const from = `$env.${v}`;
   const to = `$env.${prefix}${v}`;
   if (!cfg.parameters.jsCode.includes(from)) throw new Error(`Config node does not read ${from}`);
