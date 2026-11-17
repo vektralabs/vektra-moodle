@@ -53,6 +53,19 @@ Convention (Keep a Changelog 1.1.0):
   behind on a hand-maintained copy: missing three features and hardcoding both
   its web-service token and its state path.
 
+- **n8n — `cmid` and `lms_site` on every ingested document**: the ingest
+  request's metadata now always carries `cmid`, the Moodle course-module id
+  (integer) the document came from, and `lms_site`, the normalized site base URL
+  (string), for visible and hidden modules alike. `lms_site` comes from the new
+  optional per-instance `LMS_SITE_URL` (e.g. `MOOC_LMS_SITE_URL`), falling back
+  to `MOODLE_URL`; it must equal the site base registered in Vektra, port
+  included. A missing or invalid URL stops the run before Vektra is called. Both
+  fields are part of change detection like `hidden_from_students`: documents
+  ingested before this change have neither in the state file, so the first run
+  after upgrading re-ingests each of them once (old document deleted, new one
+  uploaded with the metadata). Expect that one-off full re-ingest of every
+  indexed course. Namespace and the `[no-ai]` opt-out are unchanged.
+
 ### Changed
 
 - **Widget script URL now cache-busted by plugin version.** The block loads

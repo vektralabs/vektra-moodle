@@ -91,6 +91,7 @@ Edit `.env` with your values:
 | `N8N_ENCRYPTION_KEY` | Random string for n8n credential encryption |
 | `MOODLE_URL` | Moodle base URL (must match `$CFG->wwwroot`, default: `http://vektra-moodle`). With the n8n stack the Moodle compose file's `MOODLE_URL` must also be set to `http://vektra-moodle` (see [Hosts file configuration](#hosts-file-configuration)) |
 | `MOODLE_WS_TOKEN` | Token from Step 2 |
+| `LMS_SITE_URL` | Optional. Site base URL registered in Vektra, sent as `lms_site` metadata (see [Document metadata](#document-metadata)). Set it only when it differs from `MOODLE_URL`; empty falls back to `MOODLE_URL` |
 | `VEKTRA_API_URL` | Vektra API URL (Docker: `http://vektra-stack-vektra-1:8000`, host: `http://localhost:8000`) |
 | `VEKTRA_API_KEY` | API key from Step 3 |
 | `INGEST_CRON` | Cron expression (default: `"*/5 * * * *"` — quote to keep dotenv parsers from splitting on whitespace) |
@@ -157,7 +158,8 @@ node n8n/tests/scope-by-block.mjs
 
 The probes read each node's source out of the workflow template and run it with
 n8n's globals stubbed, so they check the template itself rather than a copy of
-it. They cover the course scoping, the deletion diff, file extraction and the
+it. They cover the course scoping, the deletion diff, file extraction, the
+metadata sent with each ingest request (against a fake HTTP layer) and the
 summary counts.
 
 For a run against the real stack:
@@ -276,8 +278,9 @@ never editing the pipeline.
 
 n8n environment variables are per process, so two workflows in one n8n cannot
 read different values from the same name. The main instance uses `MOODLE_URL`,
-`MOODLE_WS_TOKEN` and `STATE_FILE_PATH`; a second instance uses the same names
-with a prefix, for example `MOOC_MOODLE_URL`. `INGEST_OPT_OUT_TAG` is
+`MOODLE_WS_TOKEN`, `STATE_FILE_PATH` and the optional `LMS_SITE_URL`; a second
+instance uses the same names with a prefix, for example `MOOC_MOODLE_URL` and
+`MOOC_LMS_SITE_URL`. `INGEST_OPT_OUT_TAG` is
 deliberately not prefixed: the tag is a convention taught to teachers and should
 read the same across every Moodle of the same university.
 
@@ -387,6 +390,44 @@ leaves its index untouched. This matters because on `mooc.unical.it` the
 web-service token belongs to a person's account rather than a service account —
 if that account is disabled, every lookup fails at once.
 
+## Document metadata
+
+Every ingest request carries a flat JSON `metadata` form field:
+
+| Key | Sent | Value |
+|-----|------|-------|
+| `cmid` | always | Moodle course-module id (integer) the document came from, the same id as the `mod<id>_` prefix of the file name |
+| `lms_site` | always | Normalized site base URL (string) of the Moodle the document came from |
+| `hidden_from_students` | only for hidden modules | `true` (see below) |
+
+`lms_site` is `LMS_SITE_URL` when set, otherwise `MOODLE_URL` (each with the
+instance prefix, e.g. `MOOC_LMS_SITE_URL` / `MOOC_MOODLE_URL`), normalized:
+scheme and host lowercase, default port removed (80 for http, 443 for https, any
+other port kept), path kept without trailing slash, no query, no fragment.
+
+| Configured | `lms_site` |
+|------------|------------|
+| `HTTPS://Moodle.Example.org:443/lms/` | `https://moodle.example.org/lms` |
+| `http://h:8052` | `http://h:8052` |
+| `http://H:80` | `http://h` |
+| `https://h/` | `https://h` |
+
+`LMS_SITE_URL` (or `MOODLE_URL` when unset) must match exactly the site base
+registered in Vektra (assess_sites), after normalization, port included. Set
+`LMS_SITE_URL` only when that base differs from `MOODLE_URL`, which must stay
+equal to Moodle's wwwroot for file downloads: for example `MOODLE_URL` is
+`http://localhost:8082` while Vektra registers the site as `http://moodle52`.
+If the value is missing or not a valid http(s) URL, the Config node stops the
+run before anything is sent to Vektra.
+
+Metadata is part of change detection. The state file records the `cmid` and
+`lms_site` each document was ingested with; a document whose stored entry lacks
+either (ingested before the field existed) or has a different value is classified
+`updated`, so its old document is deleted and it is ingested again with the new
+metadata, once. Changing `LMS_SITE_URL` later re-ingests the whole instance the
+same way. The mechanism is the same one that makes a visibility flip take
+effect, described below.
+
 ## Hidden modules
 
 A module hidden in Moodle (the eye icon, `visible = 0`) is still ingested, but
@@ -493,9 +534,24 @@ origin of a citation is visible.
 - Ensure the external service has **Can download files** enabled (Edit service > tick the checkbox)
 - `MOODLE_URL` must match Moodle's `$CFG->wwwroot` exactly. Both should use the Docker container name (e.g., `http://vektra-moodle`)
 
+### Removed files stay in Vektra (403 ERR-AUTH-003 on delete)
+
+The run summary reports the removed files as `failed` with
+`HTTP 403 ... ERR-AUTH-003` while new files are ingested normally: the key in
+`VEKTRA_API_KEY` has the `ingest` scope but not `admin`, which
+`DELETE /api/v1/documents/batch` requires (see [Step 3](#step-3-create-vektra-api-key)).
+Replace it with a key holding both scopes and run again. The failed deletions
+stay in the state file, so the next run retries them; nothing has to be reset.
+
 ### 409 Conflict on ingest
 
 A file with the same name but different content already exists in the namespace. The workflow prefixes filenames with the Moodle module ID (`mod123_filename.pdf`) to avoid this. If it still occurs, the workflow's view of what is already ingested has likely drifted from Vektra; reset the JSON state file at `STATE_FILE_PATH` (default `/home/node/.n8n/moodle-ingest-state.json`) and re-run — see [Force re-processing of all files](#force-re-processing-of-all-files) below.
+
+### Discussion RAG finds no course material
+
+Check `lms_site`: the normalized `LMS_SITE_URL`/`MOODLE_URL` must equal the
+site's base URL registered in Vektra, port included; a mismatch excludes every
+chunk (fail closed). See [Document metadata](#document-metadata).
 
 ### Force re-processing of all files
 

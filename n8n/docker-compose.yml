@@ -34,12 +34,17 @@ services:
       # rather than fall back to a shared file and delete another instance's
       # documents. Distinct names are required: n8n env is per-process.
       - STATE_FILE_PATH=${STATE_FILE_PATH:-/home/node/.n8n/moodle-ingest-state.json}
+      # Optional: the site base URL registered in Vektra, sent as lms_site. Set
+      # only when it differs from MOODLE_URL; empty falls back to MOODLE_URL.
+      - LMS_SITE_URL=${LMS_SITE_URL:-}
       - MOOC_MOODLE_URL=${MOOC_MOODLE_URL:-}
       - MOOC_MOODLE_WS_TOKEN=${MOOC_MOODLE_WS_TOKEN:-}
       - MOOC_STATE_FILE_PATH=${MOOC_STATE_FILE_PATH:-}
+      - MOOC_LMS_SITE_URL=${MOOC_LMS_SITE_URL:-}
       - ELEARNING_MOODLE_URL=${ELEARNING_MOODLE_URL:-}
       - ELEARNING_MOODLE_WS_TOKEN=${ELEARNING_MOODLE_WS_TOKEN:-}
       - ELEARNING_STATE_FILE_PATH=${ELEARNING_STATE_FILE_PATH:-}
+      - ELEARNING_LMS_SITE_URL=${ELEARNING_LMS_SITE_URL:-}
       - YTDLP_API_URL=${YTDLP_API_URL:-http://ytdlp-api:8000}
       - YTDLP_API_KEY=${YTDLP_API_KEY}
       - YTDLP_TRANSCRIPT_LANG=${YTDLP_TRANSCRIPT_LANG:-it}
