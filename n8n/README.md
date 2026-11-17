@@ -534,6 +534,15 @@ origin of a citation is visible.
 - Ensure the external service has **Can download files** enabled (Edit service > tick the checkbox)
 - `MOODLE_URL` must match Moodle's `$CFG->wwwroot` exactly. Both should use the Docker container name (e.g., `http://vektra-moodle`)
 
+### Removed files stay in Vektra (403 ERR-AUTH-003 on delete)
+
+The run summary reports the removed files as `failed` with
+`HTTP 403 ... ERR-AUTH-003` while new files are ingested normally: the key in
+`VEKTRA_API_KEY` has the `ingest` scope but not `admin`, which
+`DELETE /api/v1/documents/batch` requires (see [Step 3](#step-3-create-vektra-api-key)).
+Replace it with a key holding both scopes and run again. The failed deletions
+stay in the state file, so the next run retries them; nothing has to be reset.
+
 ### 409 Conflict on ingest
 
 A file with the same name but different content already exists in the namespace. The workflow prefixes filenames with the Moodle module ID (`mod123_filename.pdf`) to avoid this. If it still occurs, the workflow's view of what is already ingested has likely drifted from Vektra; reset the JSON state file at `STATE_FILE_PATH` (default `/home/node/.n8n/moodle-ingest-state.json`) and re-run — see [Force re-processing of all files](#force-re-processing-of-all-files) below.
